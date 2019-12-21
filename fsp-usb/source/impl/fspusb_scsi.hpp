@@ -121,6 +121,9 @@ namespace fspusb::impl {
 
     class SCSIDevice {
 
+        public:
+            static constexpr size_t BufferSize = 0x1000; 
+
         private:
             u8 *buf_a;
             u8 *buf_b;

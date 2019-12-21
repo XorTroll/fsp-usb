@@ -11,5 +11,6 @@ namespace fspusb::impl {
     void FinalizeManager();
     
     u32 GetAcquiredDriveCount();
+    bool IsValidDriveIndex(u32 drive_idx);
     void DoWithDriveFATFS(u32 drive_idx, std::function<void(FATFS*)> fn);
 }

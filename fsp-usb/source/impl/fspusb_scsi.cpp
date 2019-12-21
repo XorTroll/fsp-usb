@@ -167,13 +167,13 @@ namespace fspusb::impl {
 
     void SCSIDevice::AllocateBuffers() {
         if(this->buf_a == nullptr) {
-            this->buf_a = new (std::align_val_t(0x1000)) u8[0x1000]();
+            this->buf_a = new (std::align_val_t(0x1000)) u8[BufferSize]();
         }
         if(this->buf_b == nullptr) {
-            this->buf_b = new (std::align_val_t(0x1000)) u8[0x1000]();
+            this->buf_b = new (std::align_val_t(0x1000)) u8[BufferSize]();
         }
         if(this->buf_c == nullptr) {
-            this->buf_c = new (std::align_val_t(0x1000)) u8[0x1000]();
+            this->buf_c = new (std::align_val_t(0x1000)) u8[BufferSize]();
         }
     }
 
@@ -200,7 +200,7 @@ namespace fspusb::impl {
     }
 
     void SCSIDevice::PushCommand(SCSICommand &cmd) {
-        memset(this->buf_a, 0, 0x1000);
+        memset(this->buf_a, 0, BufferSize);
         cmd.ToBytes(this->buf_a);
 
         u32 out_len;
@@ -217,7 +217,7 @@ namespace fspusb::impl {
         if(transfer_length > 0) {
             if(c.GetDirection() == SCSIDirection::In) {
                 while(total_transferred < transfer_length) {
-                    memset(this->buf_b, 0, 0x1000);
+                    memset(this->buf_b, 0, BufferSize);
                     usbHsEpPostBuffer(this->out_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
 
                     if(transferred == 13)

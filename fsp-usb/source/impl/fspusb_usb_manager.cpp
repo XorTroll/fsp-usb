@@ -74,6 +74,13 @@ namespace fspusb::impl {
         /* Check new ones and (try to) acquire them */
         if(R_SUCCEEDED(rc)) {
             for(s32 i = 0; i < iface_count; i++) {
+
+                /* Considering problems with >1 drive at the same time, will force limit to a single one. */
+                /* Will remove this soon, I guess */
+                if(!g_usb_manager_drives.empty()) {
+                    continue;
+                }
+
                 UsbHsClientIfSession iface;
                 UsbHsClientEpSession inep;
                 UsbHsClientEpSession outep;
@@ -138,6 +145,11 @@ namespace fspusb::impl {
     u32 GetAcquiredDriveCount() {
         std::scoped_lock lk(g_usb_manager_lock);
         return g_usb_manager_drives.size();
+    }
+
+    bool IsValidDriveIndex(u32 drive_idx) {
+        std::scoped_lock lk(g_usb_manager_lock);
+        return drive_idx < g_usb_manager_drives.size();
     }
 
     void DoWithDriveFATFS(u32 drive_idx, std::function<void(FATFS*)> fn) {
