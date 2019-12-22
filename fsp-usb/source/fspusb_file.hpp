@@ -11,42 +11,30 @@ namespace fspusb {
             s32 usb_iface_id;
             FIL file;
 
-            void DoWithDrive(std::function<void(impl::DrivePointer&)> fn) {
-                impl::DoWithDrive(this->idx, fn);
-            }
-
-            void DoWithDriveFATFS(std::function<void(FATFS*)> fn) {
-                this->DoWithDrive([&](impl::DrivePointer &drive_ptr) {
-                    drive_ptr->DoWithFATFS(fn);
-                });
-            }
-
             bool IsDriveOk() {
                 return impl::IsDriveOk(this->usb_iface_id);
             }
 
         public:
-            DriveFile(u32 drive_idx, FIL fil) : idx(drive_idx), file(fil) {
-                this->DoWithDrive([&](impl::DrivePointer &drive_ptr) {
-                    this->usb_iface_id = drive_ptr->GetInterfaceId();
-                });
-                TMP_LOG("Created file - drive index: %d, interface ID: %d", this->idx, this->usb_iface_id)
+            DriveFile(s32 iface_id, FIL fil) : usb_iface_id(iface_id), file(fil) {
+                TMP_LOG("Created file - interface ID: %d", this->usb_iface_id)
+            }
+
+            ~DriveFile() {
+                f_close(&this->file);
             }
 
             virtual ams::Result ReadImpl(size_t *out, s64 offset, void *buffer, size_t size, const ams::fs::ReadOption &option) override final {
                 R_UNLESS(this->IsDriveOk(), ResultDriveUnavailable());
 
-                auto ffrc = FR_OK;
-                this->DoWithDrive([&](impl::DrivePointer &drive_ptr) {
-                    ffrc = f_lseek(&this->file, offset);
+                auto ffrc = f_lseek(&this->file, offset);
+                if(ffrc == FR_OK) {
+                    UINT read = 0;
+                    ffrc = f_read(&this->file, buffer, size, &read);
                     if(ffrc == FR_OK) {
-                        UINT read = 0;
-                        ffrc = f_read(&this->file, buffer, size, &read);
-                        if(ffrc == FR_OK) {
-                            *out = read;
-                        }
+                        *out = read;
                     }
-                });
+                }
 
                 return result::CreateFromFRESULT(ffrc);
             }
@@ -67,18 +55,14 @@ namespace fspusb {
             virtual ams::Result WriteImpl(s64 offset, const void *buffer, size_t size, const ams::fs::WriteOption &option) override final {
                 R_UNLESS(this->IsDriveOk(), ResultDriveUnavailable());
 
-                auto ffrc = FR_OK;
-                this->DoWithDrive([&](impl::DrivePointer &drive_ptr) {
-                    ffrc = f_lseek(&this->file, offset);
-                    if(ffrc == FR_OK) {
-                        UINT written = 0;
-                        ffrc = f_write(&this->file, buffer, size, &written);
-                    }
-                });
-
+                auto ffrc = f_lseek(&this->file, offset);
                 if(ffrc == FR_OK) {
-                    if(option.HasFlushFlag()) {
-                        R_TRY(this->FlushImpl());
+                    UINT written = 0;
+                    ffrc = f_write(&this->file, buffer, size, &written);
+                    if(ffrc == FR_OK) {
+                        if(option.HasFlushFlag()) {
+                            R_TRY(this->FlushImpl());
+                        }
                     }
                 }
 
@@ -88,10 +72,7 @@ namespace fspusb {
             virtual ams::Result SetSizeImpl(s64 size) override final {
                 R_UNLESS(this->IsDriveOk(), ResultDriveUnavailable());
 
-                auto ffrc = FR_OK;
-                this->DoWithDrive([&](impl::DrivePointer &drive_ptr) {  
-                    ffrc = f_lseek(&this->file, size);
-                });
+                auto ffrc = f_lseek(&this->file, size);
 
                 return result::CreateFromFRESULT(ffrc);
             }

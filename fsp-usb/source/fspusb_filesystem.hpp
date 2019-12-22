@@ -1,6 +1,7 @@
 
 #pragma once
 #include "fspusb_file.hpp" 
+#include "fspusb_directory.hpp"
 
 namespace fspusb {
 
@@ -197,7 +198,7 @@ namespace fspusb {
                 });
 
                 if(ffrc == FR_OK) {
-                    *out_file = std::make_unique<DriveFile>(this->idx, fil);
+                    *out_file = std::make_unique<DriveFile>(this->usb_iface_id, fil);
                 }
 
                 return result::CreateFromFRESULT(ffrc);
@@ -205,8 +206,21 @@ namespace fspusb {
 
             virtual ams::Result OpenDirectoryImpl(std::unique_ptr<ams::fs::fsa::IDirectory> *out_dir, const char *path, ams::fs::OpenDirectoryMode mode) override final {
                 R_UNLESS(this->IsDriveOk(), ResultDriveUnavailable());
-                /* TODO */
-                return ams::ResultSuccess();
+                
+                char ffpath[FS_MAX_PATH] = {0};
+                this->NormalizePath(ffpath, path);
+
+                DIR dir = {};
+                auto ffrc = FR_OK;
+                this->DoWithDriveFATFS([&](FATFS *fatfs) {
+                    ffrc = f_opendir(&dir, ffpath);
+                });
+
+                if(ffrc == FR_OK) {
+                    *out_dir = std::make_unique<DriveDirectory>(this->usb_iface_id, dir);
+                }
+
+                return result::CreateFromFRESULT(ffrc);
             }
 
             virtual ams::Result CommitImpl() override final {
