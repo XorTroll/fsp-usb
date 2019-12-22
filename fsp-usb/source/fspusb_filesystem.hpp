@@ -180,7 +180,7 @@ namespace fspusb {
                 char ffpath[FS_MAX_PATH] = {0};
                 this->NormalizePath(ffpath, path);
 
-                BYTE openmode = FA_OPEN_EXISTING;
+                BYTE openmode = FA_OPEN_ALWAYS;
                 if(mode & ams::fs::OpenMode_Append) {
                     openmode = FA_OPEN_APPEND;
                 }
