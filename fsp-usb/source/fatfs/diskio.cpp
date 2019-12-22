@@ -9,17 +9,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <switch.h>
-#include <vector>
-#include <thread>
 #include "ff.h"
 #include "diskio.h"
-#include "../impl/fspusb_drive.hpp"
-
-namespace fspusb::impl {
-	extern ams::os::Mutex g_usb_manager_lock;
-	extern std::vector<fspusb::impl::DrivePointer> g_usb_manager_drives;
-}
+#include "../impl/fspusb_usb_manager.hpp"
 
 /*-----------------------------------------------------------------------*/
 /* Get Drive Status                                                      */
@@ -29,7 +21,10 @@ extern "C" DSTATUS disk_status (
 	BYTE pdrv		/* Physical drive nmuber to identify the drive */
 )
 {
-	return 0;
+	if(fspusb::impl::IsValidDriveIndex((u32)pdrv)) {
+		return 0;
+	}
+	return STA_NOINIT;
 }
 
 
@@ -42,7 +37,10 @@ extern "C" DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {
-	return 0;
+	if(fspusb::impl::IsValidDriveIndex((u32)pdrv)) {
+		return 0;
+	}
+	return STA_NOINIT;
 }
 
 
@@ -58,13 +56,13 @@ extern "C" DRESULT disk_read (
 	UINT count		/* Number of sectors to read */
 )
 {
-	std::scoped_lock lk(fspusb::impl::g_usb_manager_lock);
-	int wres = fspusb::impl::g_usb_manager_drives[pdrv]->GetSCSIContext()->GetBlockPartition(0).ReadSectors(buff, sector, count);
-	if(wres != 0) {
-		return RES_OK;
-	}
+	auto res = RES_PARERR;
 
-	return RES_PARERR;
+	fspusb::impl::DoWithDrive((u32)pdrv, [&](fspusb::impl::DrivePointer &drive_ptr) {
+		res = drive_ptr->DoReadSectors(0, buff, sector, count);
+	});
+
+	return res;
 }
 
 
@@ -82,13 +80,13 @@ extern "C" DRESULT disk_write (
 	UINT count			/* Number of sectors to write */
 )
 {
-	std::scoped_lock lk(fspusb::impl::g_usb_manager_lock);
-	int wres = fspusb::impl::g_usb_manager_drives[pdrv]->GetSCSIContext()->GetBlockPartition(0).WriteSectors(buff, sector, count);
-	if(wres != 0) {
-		return RES_OK;
-	}
+	auto res = RES_PARERR;
 
-	return RES_PARERR;
+	fspusb::impl::DoWithDrive((u32)pdrv, [&](fspusb::impl::DrivePointer &drive_ptr) {
+		res = drive_ptr->DoWriteSectors(0, buff, sector, count);
+	});
+	
+	return res;
 }
 
 #endif
@@ -104,5 +102,7 @@ extern "C" DRESULT disk_ioctl (
 	void *buff		/* Buffer to send/receive control data */
 )
 {
-	return RES_OK;
+	/* Shall we implement any ioctls here? */
+
+	return RES_PARERR;
 }

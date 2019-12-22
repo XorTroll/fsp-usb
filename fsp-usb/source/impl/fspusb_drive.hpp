@@ -3,6 +3,7 @@
 #include <thread>
 #include <memory>
 #include "../fatfs/ff.h"
+#include "../fatfs/diskio.h"
 #include "fspusb_utils.hpp"
 #include "fspusb_scsi.hpp"
 
@@ -16,6 +17,7 @@ namespace fspusb::impl {
             NON_MOVEABLE(Drive);
 
         private:
+            ams::os::Mutex fs_lock;
             UsbHsClientIfSession usb_interface;
             UsbHsClientEpSession usb_in_endpoint;
             UsbHsClientEpSession usb_out_endpoint;
@@ -30,16 +32,37 @@ namespace fspusb::impl {
             void Unmount();
             void Dispose();
 
-            UsbHsClientIfSession *GetInterfaceAccess() {
-                return &this->usb_interface;
+            s32 GetInterfaceId() {
+                return this->usb_interface.ID;
             }
 
             SCSIDriveContext *GetSCSIContext() {
                 return this->scsi_context;
             }
 
-            FATFS *GetFATFSAccess() {
-                return &this->fat_fs;
+            DRESULT DoReadSectors(u32 part_idx, u8 *buffer, u32 sector_offset, u32 num_sectors) {
+                if(this->scsi_context != nullptr) {
+                    int res = this->scsi_context->GetBlock()->ReadPartitionSectors(part_idx, buffer, sector_offset, num_sectors);
+                    if(res != 0) {
+                        return RES_OK;
+                    }
+                }
+                return RES_PARERR;
+            }
+
+            DRESULT DoWriteSectors(u32 part_idx, const u8 *buffer, u32 sector_offset, u32 num_sectors) {
+                if(this->scsi_context != nullptr) {
+                    int res = this->scsi_context->GetBlock()->WritePartitionSectors(part_idx, buffer, sector_offset, num_sectors);
+                    if(res != 0) {
+                        return RES_OK;
+                    }
+                }
+                return RES_PARERR;
+            }
+
+            void DoWithFATFS(std::function<void(FATFS*)> fn) {
+                std::scoped_lock lk(this->fs_lock);
+                fn(&this->fat_fs);
             }
 
             const char *GetMountName() {

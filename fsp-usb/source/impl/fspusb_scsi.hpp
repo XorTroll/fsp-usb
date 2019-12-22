@@ -1,6 +1,6 @@
 
 #pragma once
-#include <stratosphere.hpp>
+#include "fspusb_utils.hpp"
 
 #define SCSI_CBW_SIGNATURE 0x43425355
 #define SCSI_COMMAND_PASSED 0
@@ -180,7 +180,8 @@ namespace fspusb::impl {
 
         public:
             SCSIBlock(SCSIDevice *dev);
-            SCSIBlockPartition &GetPartition(u32 idx);
+            int ReadPartitionSectors(u32 part_idx, u8 *buffer, u32 sector_offset, u32 num_sectors);
+            int WritePartitionSectors(u32 part_idx, const u8 *buffer, u32 sector_offset, u32 num_sectors);
             int ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors);
             int WriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors);
     };
@@ -188,22 +189,32 @@ namespace fspusb::impl {
     class SCSIDriveContext {
 
         private:
-            SCSIDevice device;
-            SCSIBlock block;
+            SCSIDevice *device;
+            SCSIBlock *block;
 
         public:
-            SCSIDriveContext(UsbHsClientIfSession *interface, UsbHsClientEpSession *in_ep, UsbHsClientEpSession *out_ep) : device(interface, in_ep, out_ep), block(&device) {}
+            SCSIDriveContext(UsbHsClientIfSession *interface, UsbHsClientEpSession *in_ep, UsbHsClientEpSession *out_ep) : device(nullptr), block(nullptr) {
+                this->device = new SCSIDevice(interface, in_ep, out_ep);
+                this->block = new SCSIBlock(this->device);
+            }
 
-            SCSIDevice &GetDevice() {
+            ~SCSIDriveContext() {
+                if(this->block != nullptr) {
+                    delete this->block;
+                    this->block = nullptr;
+                }
+                if(this->device != nullptr) {
+                    delete this->device;
+                    this->device = nullptr;
+                }
+            }
+
+            SCSIDevice *GetDevice() {
                 return this->device;
             }
 
-            SCSIBlock &GetBlock() {
+            SCSIBlock *GetBlock() {
                 return this->block;
-            }
-
-            SCSIBlockPartition &GetBlockPartition(u32 idx) {
-                return block.GetPartition(idx);
             }
     };
 }

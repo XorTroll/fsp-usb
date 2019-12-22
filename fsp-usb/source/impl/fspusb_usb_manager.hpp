@@ -12,5 +12,7 @@ namespace fspusb::impl {
     
     u32 GetAcquiredDriveCount();
     bool IsValidDriveIndex(u32 drive_idx);
+    bool IsDriveOk(s32 drive_interface_id);
+    void DoWithDrive(u32 drive_idx, std::function<void(DrivePointer&)> fn);
     void DoWithDriveFATFS(u32 drive_idx, std::function<void(FATFS*)> fn);
 }

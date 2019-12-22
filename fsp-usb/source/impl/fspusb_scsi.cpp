@@ -91,7 +91,7 @@ namespace fspusb::impl {
         return buf;
     }
 
-    SCSITestUnitReadyCommand::SCSITestUnitReadyCommand() : SCSICommand(0, SCSIDirection::None, 0, 0x6) {
+    SCSITestUnitReadyCommand::SCSITestUnitReadyCommand() : SCSICommand(0, SCSIDirection::None, 0, 6) {
         this->opcode = 0;
     }
 
@@ -137,7 +137,7 @@ namespace fspusb::impl {
         return buf;
     }
 
-    SCSIWrite10Command::SCSIWrite10Command(u32 block_addr, u32 block_sz, u16 xfer_blocks) : SCSICommand(block_sz * xfer_blocks, SCSIDirection::In, 0, 10) {
+    SCSIWrite10Command::SCSIWrite10Command(u32 block_addr, u32 block_sz, u16 xfer_blocks) : SCSICommand(block_sz * xfer_blocks, SCSIDirection::Out, 0, 10) {
         this->opcode = 0x2a;
         this->block_address = block_addr;
         this->transfer_blocks = xfer_blocks;
@@ -242,7 +242,7 @@ namespace fspusb::impl {
             else {
                 while(total_transferred < transfer_length) {
                     memcpy(this->buf_b, buffer + total_transferred, transfer_length - total_transferred);
-                    auto rc = usbHsEpPostBuffer(this->in_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
+                    usbHsEpPostBuffer(this->in_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
                     total_transferred += transferred;
                 }
             }
@@ -285,7 +285,7 @@ namespace fspusb::impl {
         this->capacity = size_lba * lba_bytes;
         this->block_size = lba_bytes;
         u8 mbr[0x200];
-        ReadSectors(mbr, 0, 1);
+        this->ReadSectors(mbr, 0, 1);
         memcpy(&partition_infos[0], &mbr[0x1be], sizeof(partition_infos[0]));
         memcpy(&partition_infos[1], &mbr[0x1ce], sizeof(partition_infos[1]));
         memcpy(&partition_infos[2], &mbr[0x1de], sizeof(partition_infos[2]));
@@ -298,19 +298,35 @@ namespace fspusb::impl {
         }
     }
 
-    SCSIBlockPartition &SCSIBlock::GetPartition(u32 idx) {
-        return this->partitions[idx];
+    int SCSIBlock::ReadPartitionSectors(u32 part_idx, u8 *buffer, u32 sector_offset, u32 num_sectors) {
+        if(part_idx > 3) {
+            return 0;
+        }
+        return this->partitions[part_idx].ReadSectors(buffer, sector_offset, num_sectors);
+    }
+
+    int SCSIBlock::WritePartitionSectors(u32 part_idx, const u8 *buffer, u32 sector_offset, u32 num_sectors) {
+        if(part_idx > 3) {
+            return 0;
+        }
+        return this->partitions[part_idx].WriteSectors(buffer, sector_offset, num_sectors);
     }
 
     int SCSIBlock::ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors) {
+        if(this->device == nullptr) {
+            return 0;
+        }
         SCSIRead10Command read_ten(sector_offset, this->block_size, num_sectors);
-        SCSICommandStatus status = this->device->TransferCommand(read_ten, buffer, num_sectors * this->block_size);
+        this->device->TransferCommand(read_ten, buffer, num_sectors * this->block_size);
         return num_sectors;
     }
 
     int SCSIBlock::WriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors) {
+        if(this->device == nullptr) {
+            return 0;
+        }
         SCSIWrite10Command write_ten(sector_offset, this->block_size, num_sectors);
-        SCSICommandStatus status = this->device->TransferCommand(write_ten, (u8*)buffer, num_sectors * this->block_size);
+        this->device->TransferCommand(write_ten, (u8*)buffer, num_sectors * this->block_size);
         return num_sectors;
     }
 }

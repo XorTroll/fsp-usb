@@ -11,9 +11,7 @@ namespace fspusb::impl {
         if(!this->mounted) {
             FormatDriveMountName(this->mount_name, drive_idx);
             auto ffrc = f_mount(&this->fat_fs, this->mount_name, 1);
-            if(ffrc != FR_OK) {
-                rc = MAKERESULT(248, 1000 + ffrc);
-            }
+            rc = fspusb::result::CreateFromFRESULT(ffrc).GetValue();
             if(R_SUCCEEDED(rc)) {
                 this->mounted = true;
             }

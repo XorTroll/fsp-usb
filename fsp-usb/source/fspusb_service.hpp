@@ -1,6 +1,10 @@
 
 #pragma once
 #include "impl/fspusb_usb_manager.hpp"
+#include "fspusb_filesystem.hpp"
+#include <stratosphere/fssrv/fssrv_interface_adapters.hpp>
+
+using IFileSystemInterface = ams::fssrv::impl::FileSystemInterfaceAdapter;
 
 namespace fspusb {
 
@@ -11,6 +15,7 @@ namespace fspusb {
                 GetMountedDriveCount = 0,
                 GetDriveFileSystemType = 1,
                 GetDriveLabel = 2,
+                OpenDriveFileSystem = 3,
 
                 /* TODO: filesystem-related commands! */
             };
@@ -40,10 +45,20 @@ namespace fspusb {
                 return result::CreateFromFRESULT(ffrc);
             }
 
+            ams::Result OpenDriveFileSystem(u32 drive_idx, ams::sf::Out<std::shared_ptr<IFileSystemInterface>> out_fs) {
+                R_UNLESS(impl::IsValidDriveIndex(drive_idx), ResultInvalidDriveIndex());
+
+                std::shared_ptr<ams::fs::fsa::IFileSystem> drv_fs = std::make_shared<DriveFileSystem>(drive_idx);
+                out_fs.SetValue(std::make_shared<IFileSystemInterface>(std::move(drv_fs), false));
+
+                return ams::ResultSuccess();
+            }
+
             DEFINE_SERVICE_DISPATCH_TABLE {
                 MAKE_SERVICE_COMMAND_META(GetMountedDriveCount),
                 MAKE_SERVICE_COMMAND_META(GetDriveFileSystemType),
                 MAKE_SERVICE_COMMAND_META(GetDriveLabel),
+                MAKE_SERVICE_COMMAND_META(OpenDriveFileSystem),
             };
     };
 

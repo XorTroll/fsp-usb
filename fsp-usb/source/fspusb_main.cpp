@@ -54,10 +54,11 @@ void __appInit(void) {
     hos::SetVersionForLibnx();
 
     sm::DoWithSession([&]() {
-        /*
+
+        /* Used for logging (temporary) */
         R_ASSERT(fsInitialize());
         R_ASSERT(fsdevMountSdmc());
-        */
+
         ::Result rc;
         do {
             rc = fspusb::impl::InitializeManager();
@@ -68,10 +69,11 @@ void __appInit(void) {
 }
 
 void __appExit(void) {
-    /*
+
+    /* Used for logging (temporary) */
     fsdevUnmountAll();
     fsExit();
-    */
+
     fspusb::impl::FinalizeManager();
 }
 

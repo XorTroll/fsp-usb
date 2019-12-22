@@ -48,7 +48,7 @@ namespace fspusb::impl {
                     /* For each drive in our list, check whether it is still available (by looping through actual acquired interfaces) */
                     bool ok = false;
                     for(s32 j = 0; j < iface_count; j++) {
-                        if(iface_block[j].inf.ID == drive->GetInterfaceAccess()->ID) {
+                        if(iface_block[j].inf.ID == drive->GetInterfaceId()) {
                             ok = true;
                             break;
                         }
@@ -152,11 +152,27 @@ namespace fspusb::impl {
         return drive_idx < g_usb_manager_drives.size();
     }
 
-    void DoWithDriveFATFS(u32 drive_idx, std::function<void(FATFS*)> fn) {
+    bool IsDriveOk(s32 drive_interface_id) {
+        std::scoped_lock lk(g_usb_manager_lock);
+        for(auto &drive: g_usb_manager_drives) {
+            if(drive_interface_id == drive->GetInterfaceId()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void DoWithDrive(u32 drive_idx, std::function<void(DrivePointer&)> fn) {
         std::scoped_lock lk(g_usb_manager_lock);
         if(drive_idx < g_usb_manager_drives.size()) {
-            auto fatfs = g_usb_manager_drives[drive_idx]->GetFATFSAccess();
-            fn(fatfs);
+            auto &drive_ptr = g_usb_manager_drives[drive_idx];
+            fn(drive_ptr);
         }
+    }
+
+    void DoWithDriveFATFS(u32 drive_idx, std::function<void(FATFS*)> fn) {
+        DoWithDrive(drive_idx, [&](DrivePointer &drive_ptr) {
+            drive_ptr->DoWithFATFS(fn);
+        });
     }
 }
