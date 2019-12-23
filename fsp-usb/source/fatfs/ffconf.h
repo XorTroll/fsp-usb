@@ -168,7 +168,7 @@
 
 
 #define FF_STR_VOLUME_ID	0
-#define FF_VOLUME_STRS		"usb-0","usb-1","usb-2","usb-3"
+#define FF_VOLUME_STRS		"RAM","NAND","CF","SD","SD2","USB","USB2","USB3"
 /* FF_STR_VOLUME_ID switches support for volume ID in arbitrary strings.
 /  When FF_STR_VOLUME_ID is set to 1 or 2, arbitrary strings can be used as drive
 /  number in the path name. FF_VOLUME_STRS defines the volume ID strings for each
@@ -237,8 +237,8 @@
 
 
 #define FF_FS_NORTC		1
-#define FF_NORTC_MON	6
-#define FF_NORTC_MDAY	15
+#define FF_NORTC_MON	4
+#define FF_NORTC_MDAY	12
 #define FF_NORTC_YEAR	2019
 /* The option FF_FS_NORTC switches timestamp functiton. If the system does not have
 /  any RTC function or valid timestamp is not needed, set FF_FS_NORTC = 1 to disable

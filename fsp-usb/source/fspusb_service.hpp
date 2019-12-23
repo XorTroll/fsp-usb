@@ -15,9 +15,8 @@ namespace fspusb {
                 GetMountedDriveCount = 0,
                 GetDriveFileSystemType = 1,
                 GetDriveLabel = 2,
-                OpenDriveFileSystem = 3,
-
-                /* TODO: filesystem-related commands! */
+                SetDriveLabel = 3,
+                OpenDriveFileSystem = 4,
             };
 
         public:
@@ -45,6 +44,19 @@ namespace fspusb {
                 return result::CreateFromFRESULT(ffrc);
             }
 
+            ams::Result SetDriveLabel(u32 drive_idx, ams::sf::InBuffer &label_str) {
+                R_UNLESS(impl::IsValidDriveIndex(drive_idx), ResultInvalidDriveIndex());
+
+                char mountname[0x10] = {0};
+                impl::FormatDriveMountName(mountname, drive_idx);
+
+                char newname[0x100] = {0};
+                sprintf(newname, "%s%s", mountname, (char*)label_str.GetPointer());
+
+                auto ffrc = f_setlabel(newname);
+                return result::CreateFromFRESULT(ffrc);
+            }
+
             ams::Result OpenDriveFileSystem(u32 drive_idx, ams::sf::Out<std::shared_ptr<IFileSystemInterface>> out_fs) {
                 R_UNLESS(impl::IsValidDriveIndex(drive_idx), ResultInvalidDriveIndex());
 
@@ -58,6 +70,7 @@ namespace fspusb {
                 MAKE_SERVICE_COMMAND_META(GetMountedDriveCount),
                 MAKE_SERVICE_COMMAND_META(GetDriveFileSystemType),
                 MAKE_SERVICE_COMMAND_META(GetDriveLabel),
+                MAKE_SERVICE_COMMAND_META(SetDriveLabel),
                 MAKE_SERVICE_COMMAND_META(OpenDriveFileSystem),
             };
     };

@@ -40,7 +40,7 @@ namespace fspusb {
                     }
                     memset(&entry, 0, sizeof(ams::fs::DirectoryEntry));
                     strcpy(entry.name, info.fname);
-                    // Fill in the DirectoryEntry struct, then copy back to the buffer
+                    /* Fill in the DirectoryEntry struct, then copy back to the buffer */
                     if(info.fattrib & AM_DIR) {
                         entry.type = FsDirEntryType_Dir;
                     }
