@@ -9,11 +9,16 @@ namespace fspusb::impl {
     Result Drive::Mount(u32 drive_idx) {
         Result rc = 0;
         if(!this->mounted) {
-            FormatDriveMountName(this->mount_name, drive_idx);
-            auto ffrc = f_mount(&this->fat_fs, this->mount_name, 1);
-            rc = fspusb::result::CreateFromFRESULT(ffrc).GetValue();
-            if(R_SUCCEEDED(rc)) {
-                this->mounted = true;
+            if(this->scsi_context->GetBlock()->Ok()) {
+                FormatDriveMountName(this->mount_name, drive_idx);
+                auto ffrc = f_mount(&this->fat_fs, this->mount_name, 1);
+                rc = fspusb::result::CreateFromFRESULT(ffrc).GetValue();
+                if(R_SUCCEEDED(rc)) {
+                    this->mounted = true;
+                }
+            }
+            else {
+                rc = fspusb::ResultDriveInitializationFailure().GetValue();
             }
         }
         return rc;

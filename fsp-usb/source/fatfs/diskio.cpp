@@ -13,6 +13,18 @@
 #include "diskio.h"
 #include "../impl/fspusb_usb_manager.hpp"
 
+static u8 GetDriveStatus(u32 drv_idx) {
+	u8 status = STA_NOINIT;
+
+	fspusb::impl::DoWithDrive(drv_idx, [&](fspusb::impl::DrivePointer &drive_ptr) {
+		if(drive_ptr->GetSCSIContext()->GetBlock()->Ok()) {
+			status = 0;
+		}
+	});
+
+	return STA_NOINIT;
+}
+
 /*-----------------------------------------------------------------------*/
 /* Get Drive Status                                                      */
 /*-----------------------------------------------------------------------*/
@@ -21,10 +33,7 @@ extern "C" DSTATUS disk_status (
 	BYTE pdrv		/* Physical drive nmuber to identify the drive */
 )
 {
-	if(fspusb::impl::IsValidDriveIndex((u32)pdrv)) {
-		return 0;
-	}
-	return STA_NOINIT;
+	return GetDriveStatus((u32)pdrv);
 }
 
 
@@ -37,10 +46,7 @@ extern "C" DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {
-	if(fspusb::impl::IsValidDriveIndex((u32)pdrv)) {
-		return 0;
-	}
-	return STA_NOINIT;
+	return GetDriveStatus((u32)pdrv);
 }
 
 
@@ -59,7 +65,10 @@ extern "C" DRESULT disk_read (
 	auto res = RES_PARERR;
 
 	fspusb::impl::DoWithDrive((u32)pdrv, [&](fspusb::impl::DrivePointer &drive_ptr) {
-		res = drive_ptr->DoReadSectors(0, buff, sector, count);
+		auto part_idx = drive_ptr->GetValidPartitionIndex();
+		if(part_idx < 4) {
+			res = drive_ptr->DoReadSectors(0, buff, sector, count);
+		}
 	});
 
 	return res;
@@ -83,7 +92,10 @@ extern "C" DRESULT disk_write (
 	auto res = RES_PARERR;
 
 	fspusb::impl::DoWithDrive((u32)pdrv, [&](fspusb::impl::DrivePointer &drive_ptr) {
-		res = drive_ptr->DoWriteSectors(0, buff, sector, count);
+		auto part_idx = drive_ptr->GetValidPartitionIndex();
+		if(part_idx < 4) {
+			res = drive_ptr->DoWriteSectors(0, buff, sector, count);
+		}
 	});
 	
 	return res;

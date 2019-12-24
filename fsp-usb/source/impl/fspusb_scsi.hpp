@@ -131,6 +131,7 @@ namespace fspusb::impl {
             UsbHsClientIfSession *client;
             UsbHsClientEpSession *in_endpoint;
             UsbHsClientEpSession *out_endpoint;
+            bool ok;
         
         public:
             SCSIDevice(UsbHsClientIfSession *iface, UsbHsClientEpSession *in_ep, UsbHsClientEpSession *out_ep);
@@ -140,6 +141,10 @@ namespace fspusb::impl {
             SCSICommandStatus ReadStatus();
             void PushCommand(SCSICommand &cmd);
             SCSICommandStatus TransferCommand(SCSICommand &c, u8 *buffer, size_t buffer_size);
+
+            bool Ok() {
+                return this->ok;
+            }
     };
 
     struct MBRPartition {
@@ -159,14 +164,18 @@ namespace fspusb::impl {
             SCSIBlock *block;
             u32 start_lba_offset;
             u32 lba_size;
+            bool empty;
 
         public:
-            SCSIBlockPartition() : block(nullptr), start_lba_offset(0), lba_size(0) {}
-            SCSIBlockPartition(SCSIBlock *blk, MBRPartition partition_info) : block(blk), start_lba_offset(partition_info.start_lba), lba_size(partition_info.num_sectors) {}
+            SCSIBlockPartition() : block(nullptr), start_lba_offset(0), lba_size(0), empty(true) {}
+            SCSIBlockPartition(SCSIBlock *blk, MBRPartition partition_info) : block(blk), start_lba_offset(partition_info.start_lba), lba_size(partition_info.num_sectors), empty(false) {}
 
             int ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors);
-
             int WriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors);
+
+            bool IsEmpty() {
+                return this->empty;
+            }
     };
 
     class SCSIBlock {
@@ -177,6 +186,7 @@ namespace fspusb::impl {
             SCSIBlockPartition partitions[4];
             MBRPartition partition_infos[4];
             SCSIDevice *device;
+            bool ok;
 
         public:
             SCSIBlock(SCSIDevice *dev);
@@ -184,6 +194,22 @@ namespace fspusb::impl {
             int WritePartitionSectors(u32 part_idx, const u8 *buffer, u32 sector_offset, u32 num_sectors);
             int ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors);
             int WriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors);
+
+            u32 GetFirstValidPartitionIndex() {
+                for(u32 i = 0; i < 4; i++) {
+                    if(!this->partitions[i].IsEmpty()) {
+                        return i;
+                    }
+                }
+                return 0xFF;
+            }
+
+            bool Ok() {
+                if(this->device == nullptr) {
+                    return false;
+                }
+                return this->ok && this->device->Ok();
+            }
     };
 
     class SCSIDriveContext {

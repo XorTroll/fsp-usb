@@ -157,7 +157,7 @@ namespace fspusb::impl {
         return buf;
     }
 
-    SCSIDevice::SCSIDevice(UsbHsClientIfSession *iface, UsbHsClientEpSession *in_ep, UsbHsClientEpSession *out_ep) : buf_a(nullptr), buf_b(nullptr), buf_c(nullptr), client(iface), in_endpoint(in_ep), out_endpoint(out_ep) {
+    SCSIDevice::SCSIDevice(UsbHsClientIfSession *iface, UsbHsClientEpSession *in_ep, UsbHsClientEpSession *out_ep) : buf_a(nullptr), buf_b(nullptr), buf_c(nullptr), client(iface), in_endpoint(in_ep), out_endpoint(out_ep), ok(true) {
         this->AllocateBuffers();
     }
 
@@ -193,64 +193,83 @@ namespace fspusb::impl {
         u32 out_len;
         SCSICommandStatus status = {};
 
-        usbHsEpPostBuffer(this->out_endpoint, this->buf_c, 0x10, &out_len);
-        memcpy(&status, this->buf_c, sizeof(status));
+        if(this->ok) {
+            auto rc = usbHsEpPostBuffer(this->out_endpoint, this->buf_c, 0x10, &out_len);
+            if(R_SUCCEEDED(rc)) {
+                memcpy(&status, this->buf_c, sizeof(status));
+            }
+            else {
+                this->ok = false;
+            }
+        }
 
         return status;
     }
 
     void SCSIDevice::PushCommand(SCSICommand &cmd) {
-        memset(this->buf_a, 0, BufferSize);
-        cmd.ToBytes(this->buf_a);
+        if(this->ok) {
+            memset(this->buf_a, 0, BufferSize);
+            cmd.ToBytes(this->buf_a);
 
-        u32 out_len;
-        usbHsEpPostBuffer(this->in_endpoint, this->buf_a, SCSIBuffer::BufferSize, &out_len);
+            u32 out_len;
+            auto rc = usbHsEpPostBuffer(this->in_endpoint, this->buf_a, SCSIBuffer::BufferSize, &out_len);
+            this->ok = R_SUCCEEDED(rc);
+        }
     }
 
     SCSICommandStatus SCSIDevice::TransferCommand(SCSICommand &c, u8 *buffer, size_t buffer_size) {
-        this->PushCommand(c);
+        if(this->ok) {
+            this->PushCommand(c);
+            u32 transfer_length = c.GetDataTransferLength();
+            u32 transferred = 0;
+            u32 total_transferred = 0;
 
-        u32 transfer_length = c.GetDataTransferLength();
-        u32 transferred = 0;
-        u32 total_transferred = 0;
+            if(transfer_length > 0) {
+                if(c.GetDirection() == SCSIDirection::In) {
+                    while(total_transferred < transfer_length) {
+                        memset(this->buf_b, 0, BufferSize);
+                        auto rc = usbHsEpPostBuffer(this->out_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
+                        if(R_SUCCEEDED(rc)) {
+                            if(transferred == 13)
+                            {
+                                u32 signature;
+                                memcpy(&signature, this->buf_b, 4);
+                                if(signature == SCSI_CSW_SIGNATURE) {
 
-        if(transfer_length > 0) {
-            if(c.GetDirection() == SCSIDirection::In) {
-                while(total_transferred < transfer_length) {
-                    memset(this->buf_b, 0, BufferSize);
-                    usbHsEpPostBuffer(this->out_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
+                                    /* We weren't expecting a CSW, but we got one anyway */
+                                    SCSICommandStatus status = {};
+                                    memcpy(&status, this->buf_b, sizeof(status));
 
-                    if(transferred == 13)
-                    {
-                        u32 signature;
-                        memcpy(&signature, this->buf_b, 4);
-                        if(signature == SCSI_CSW_SIGNATURE) {
+                                    return status;
+                                }
+                            }
 
-                            // We weren't expecting a CSW!
-                            // But we got one anyway!
-                            SCSICommandStatus status = {};
-                            memcpy(&status, this->buf_b, sizeof(status));
-
-                            return status;
+                            memcpy(buffer + total_transferred, this->buf_b, transferred);
+                            total_transferred += transferred;
+                        }
+                        else {
+                            this->ok = false;
+                            break;
                         }
                     }
-
-                    memcpy(buffer + total_transferred, this->buf_b, transferred);
-                    total_transferred += transferred;
                 }
-            }
-            else {
-                while(total_transferred < transfer_length) {
-                    memcpy(this->buf_b, buffer + total_transferred, transfer_length - total_transferred);
-                    usbHsEpPostBuffer(this->in_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
-                    total_transferred += transferred;
+                else {
+                    while(total_transferred < transfer_length) {
+                        memcpy(this->buf_b, buffer + total_transferred, transfer_length - total_transferred);
+                        auto rc = usbHsEpPostBuffer(this->in_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
+                        if(R_SUCCEEDED(rc)) {
+                            total_transferred += transferred;
+                        }
+                        else {
+                            this->ok = false;
+                            break;
+                        }
+                    }
                 }
             }
         }
 
-        SCSICommandStatus w = this->ReadStatus();
-
-        return w;
+        return this->ReadStatus();
     }
 
     int SCSIBlockPartition::ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors) {
@@ -267,53 +286,77 @@ namespace fspusb::impl {
         return this->block->WriteSectors(buffer, sector_offset + this->start_lba_offset, num_sectors);
     }
 
-    SCSIBlock::SCSIBlock(SCSIDevice *dev) : device(dev) {
+    SCSIBlock::SCSIBlock(SCSIDevice *dev) : device(dev), ok(true) {
         SCSIInquiryCommand inquiry(36);
         SCSITestUnitReadyCommand test_unit_ready;
         SCSIReadCapacityCommand read_capacity;
         u8 inquiry_response[36] = {0};
         SCSICommandStatus status = this->device->TransferCommand(inquiry, inquiry_response, 36);
         status = this->device->TransferCommand(test_unit_ready, NULL, 0);
-        u8 read_capacity_response[8] = {0};
-        u32 size_lba;
-        u32 lba_bytes;
-        status = this->device->TransferCommand(read_capacity, read_capacity_response, 8);
-        memcpy(&size_lba, &read_capacity_response[0], 4);
-        size_lba = __builtin_bswap32(size_lba);
-        memcpy(&lba_bytes, &read_capacity_response[4], 4);
-        lba_bytes = __builtin_bswap32(lba_bytes);
-        this->capacity = size_lba * lba_bytes;
-        this->block_size = lba_bytes;
-        u8 mbr[0x200];
-        this->ReadSectors(mbr, 0, 1);
-        memcpy(&partition_infos[0], &mbr[0x1be], sizeof(partition_infos[0]));
-        memcpy(&partition_infos[1], &mbr[0x1ce], sizeof(partition_infos[1]));
-        memcpy(&partition_infos[2], &mbr[0x1de], sizeof(partition_infos[2]));
-        memcpy(&partition_infos[3], &mbr[0x1ee], sizeof(partition_infos[3]));
-        for(u32 i = 0; i < 4; i++) {
-            auto p = partition_infos[i];
-            if(p.partition_type != 0) {
-                partitions[i] = SCSIBlockPartition(this, p);
+        if(status.status == 0) {
+            u8 read_capacity_response[8] = {0};
+            u32 size_lba;
+            u32 lba_bytes;
+            status = this->device->TransferCommand(read_capacity, read_capacity_response, 8);
+            memcpy(&size_lba, &read_capacity_response[0], 4);
+            size_lba = __builtin_bswap32(size_lba);
+            memcpy(&lba_bytes, &read_capacity_response[4], 4);
+            lba_bytes = __builtin_bswap32(lba_bytes);
+            this->capacity = size_lba * lba_bytes;
+            this->block_size = lba_bytes;
+            u8 mbr[0x200];
+            this->ReadSectors(mbr, 0, 1);
+            memcpy(&this->partition_infos[0], &mbr[0x1be], sizeof(this->partition_infos[0]));
+            memcpy(&this->partition_infos[1], &mbr[0x1ce], sizeof(this->partition_infos[1]));
+            memcpy(&this->partition_infos[2], &mbr[0x1de], sizeof(this->partition_infos[2]));
+            memcpy(&this->partition_infos[3], &mbr[0x1ee], sizeof(this->partition_infos[3]));
+
+            bool all_empty = true;
+            for(u32 i = 0; i < 4; i++) {
+                if(this->partition_infos[i].partition_type != 0) {
+                    this->partitions[i] = SCSIBlockPartition(this, this->partition_infos[i]);
+                    all_empty = false;
+                }
             }
+            
+            /* If all partitions aren't initialized... :P */
+            if(all_empty) {
+                this->ok = false;
+            }
+        }
+        else {
+            this->ok = false;
         }
     }
 
     int SCSIBlock::ReadPartitionSectors(u32 part_idx, u8 *buffer, u32 sector_offset, u32 num_sectors) {
+        if(!this->Ok()) {
+            return 0;
+        }
         if(part_idx > 3) {
+            return 0;
+        }
+        if(this->partitions[part_idx].IsEmpty()) {
             return 0;
         }
         return this->partitions[part_idx].ReadSectors(buffer, sector_offset, num_sectors);
     }
 
     int SCSIBlock::WritePartitionSectors(u32 part_idx, const u8 *buffer, u32 sector_offset, u32 num_sectors) {
+        if(!this->Ok()) {
+            return 0;
+        }
         if(part_idx > 3) {
+            return 0;
+        }
+        if(this->partitions[part_idx].IsEmpty()) {
             return 0;
         }
         return this->partitions[part_idx].WriteSectors(buffer, sector_offset, num_sectors);
     }
 
     int SCSIBlock::ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors) {
-        if(this->device == nullptr) {
+        if(!this->Ok()) {
             return 0;
         }
         SCSIRead10Command read_ten(sector_offset, this->block_size, num_sectors);
@@ -322,7 +365,7 @@ namespace fspusb::impl {
     }
 
     int SCSIBlock::WriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors) {
-        if(this->device == nullptr) {
+        if(!this->Ok()) {
             return 0;
         }
         SCSIWrite10Command write_ten(sector_offset, this->block_size, num_sectors);
