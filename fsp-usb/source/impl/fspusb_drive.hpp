@@ -10,7 +10,7 @@
 namespace fspusb::impl {
 
     // Maximum amount of drives
-    constexpr u32 DriveMax = 4;
+    constexpr u32 DriveMax = FF_VOLUMES;
 
     class Drive {
             NON_COPYABLE(Drive);
