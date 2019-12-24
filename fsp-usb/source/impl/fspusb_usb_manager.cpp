@@ -74,13 +74,6 @@ namespace fspusb::impl {
         /* Check new ones and (try to) acquire them */
         if(R_SUCCEEDED(rc)) {
             for(s32 i = 0; i < iface_count; i++) {
-
-                /* Considering problems with >1 drive at the same time, will force limit to a single one. */
-                /* Will remove this soon, I guess */
-                if(!g_usb_manager_drives.empty()) {
-                    continue;
-                }
-
                 UsbHsClientIfSession iface;
                 UsbHsClientEpSession inep;
                 UsbHsClientEpSession outep;

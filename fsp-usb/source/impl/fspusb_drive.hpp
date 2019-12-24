@@ -47,6 +47,13 @@ namespace fspusb::impl {
                 return 0xFF;
             }
 
+            bool IsSCSIOk() {
+                if(this->scsi_context != nullptr) {
+                    return this->scsi_context->Ok();
+                }
+                return false;
+            }
+
             DRESULT DoReadSectors(u32 part_idx, u8 *buffer, u32 sector_offset, u32 num_sectors) {
                 if(this->scsi_context != nullptr) {
                     int res = this->scsi_context->GetBlock()->ReadPartitionSectors(part_idx, buffer, sector_offset, num_sectors);

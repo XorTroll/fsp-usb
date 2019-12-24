@@ -15,9 +15,7 @@ namespace fspusb {
             }
 
         public:
-            DriveDirectory(s32 iface_id, DIR dir) : usb_iface_id(iface_id), directory(dir) {
-                TMP_LOG("Created directory - interface ID: %d", this->usb_iface_id)
-            }
+            DriveDirectory(s32 iface_id, DIR dir) : usb_iface_id(iface_id), directory(dir) {}
 
             ~DriveDirectory() {
                 f_closedir(&this->directory);

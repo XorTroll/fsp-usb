@@ -37,7 +37,6 @@ namespace fspusb {
                     this->usb_iface_id = drive_ptr->GetInterfaceId();
                 });
                 impl::FormatDriveMountName(this->mount_name, this->idx);
-                TMP_LOG("Created file system - drive index: %d, interface ID: %d, mount name: '%s'", this->idx, this->usb_iface_id, this->mount_name)
             }
 
             virtual ams::Result CreateFileImpl(const char *path, s64 size, int flags) override final {
@@ -45,8 +44,6 @@ namespace fspusb {
                 
                 char ffpath[FS_MAX_PATH] = {0};
                 this->NormalizePath(ffpath, path);
-
-                TMP_LOG("CreateFile - input path: %s, processed path: %s", path, ffpath)
 
                 auto ffrc = FR_OK;
                 this->DoWithDriveFATFS([&](FATFS *fatfs) {
@@ -58,8 +55,6 @@ namespace fspusb {
                     }
                 });
 
-                TMP_LOG("CreateFile - return result: %d", ffrc)
-
                 return result::CreateFromFRESULT(ffrc);
             }
 
@@ -69,16 +64,10 @@ namespace fspusb {
                 char ffpath[FS_MAX_PATH] = {0};
                 this->NormalizePath(ffpath, path);
 
-                TMP_LOG("DeleteFile - input path: %s, processed path: %s", path, ffpath)
-
-                /* TODO: this crashes for some reason :P */
-
                 auto ffrc = FR_OK;
                 this->DoWithDriveFATFS([&](FATFS *fatfs) {
                     ffrc = f_unlink(ffpath);
                 });
-
-                TMP_LOG("DeleteFile - return result: %d", ffrc)
 
                 return result::CreateFromFRESULT(ffrc);
             }
@@ -89,16 +78,10 @@ namespace fspusb {
                 char ffpath[FS_MAX_PATH] = {0};
                 this->NormalizePath(ffpath, path);
 
-                TMP_LOG("CreateDirectory - input path: %s, processed path: %s", path, ffpath)
-
-                /* TODO: this crashes for some reason :P */
-
                 auto ffrc = FR_OK;
                 this->DoWithDriveFATFS([&](FATFS *fatfs) {
                     ffrc = f_mkdir(ffpath);
                 });
-
-                TMP_LOG("CreateDirectory - return result: %d", ffrc)
 
                 return result::CreateFromFRESULT(ffrc);
             }
@@ -109,14 +92,10 @@ namespace fspusb {
                 char ffpath[FS_MAX_PATH] = {0};
                 this->NormalizePath(ffpath, path);
 
-                TMP_LOG("DeleteDirectory - input path: %s, processed path: %s", path, ffpath)
-
                 auto ffrc = FR_OK;
                 this->DoWithDriveFATFS([&](FATFS *fatfs) {
                     ffrc = f_rmdir(ffpath);
                 });
-
-                TMP_LOG("DeleteDirectory - return result: %d", ffrc)
 
                 return result::CreateFromFRESULT(ffrc);
             }
@@ -134,14 +113,10 @@ namespace fspusb {
                 char ffnewpath[FS_MAX_PATH] = {0};
                 this->NormalizePath(ffnewpath, new_path);
 
-                TMP_LOG("RenameFile - input old path: %s, processed old path: %s, input new path: %s, processed new path: %s", old_path, ffoldpath, new_path, ffnewpath)
-
                 auto ffrc = FR_OK;
                 this->DoWithDriveFATFS([&](FATFS *fatfs) {
                     ffrc = f_rename(ffoldpath, ffnewpath);
                 });
-
-                TMP_LOG("RenameFile - return result: %d", ffrc)
 
                 return result::CreateFromFRESULT(ffrc);
             }

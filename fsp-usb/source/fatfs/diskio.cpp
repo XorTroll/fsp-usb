@@ -17,12 +17,12 @@ static u8 GetDriveStatus(u32 drv_idx) {
 	u8 status = STA_NOINIT;
 
 	fspusb::impl::DoWithDrive(drv_idx, [&](fspusb::impl::DrivePointer &drive_ptr) {
-		if(drive_ptr->GetSCSIContext()->GetBlock()->Ok()) {
+		if(drive_ptr->IsSCSIOk()) {
 			status = 0;
 		}
 	});
 
-	return STA_NOINIT;
+	return status;
 }
 
 /*-----------------------------------------------------------------------*/
@@ -67,7 +67,7 @@ extern "C" DRESULT disk_read (
 	fspusb::impl::DoWithDrive((u32)pdrv, [&](fspusb::impl::DrivePointer &drive_ptr) {
 		auto part_idx = drive_ptr->GetValidPartitionIndex();
 		if(part_idx < 4) {
-			res = drive_ptr->DoReadSectors(0, buff, sector, count);
+			res = drive_ptr->DoReadSectors(part_idx, buff, sector, count);
 		}
 	});
 

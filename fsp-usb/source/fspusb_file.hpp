@@ -16,9 +16,7 @@ namespace fspusb {
             }
 
         public:
-            DriveFile(s32 iface_id, FIL fil) : usb_iface_id(iface_id), file(fil) {
-                TMP_LOG("Created file - interface ID: %d", this->usb_iface_id)
-            }
+            DriveFile(s32 iface_id, FIL fil) : usb_iface_id(iface_id), file(fil) {}
 
             ~DriveFile() {
                 f_close(&this->file);

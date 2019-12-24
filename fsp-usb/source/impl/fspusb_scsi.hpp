@@ -242,5 +242,9 @@ namespace fspusb::impl {
             SCSIBlock *GetBlock() {
                 return this->block;
             }
+
+            bool Ok() {
+                return this->block->Ok();
+            }
     };
 }
