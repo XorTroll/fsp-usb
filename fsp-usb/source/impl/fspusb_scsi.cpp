@@ -292,7 +292,7 @@ namespace fspusb::impl {
         SCSIReadCapacityCommand read_capacity;
         u8 inquiry_response[36] = {0};
         SCSICommandStatus status = this->device->TransferCommand(inquiry, inquiry_response, 36);
-        status = this->device->TransferCommand(test_unit_ready, NULL, 0);
+        status = this->device->TransferCommand(test_unit_ready, nullptr, 0);
         if(status.status == 0) {
             u8 read_capacity_response[8] = {0};
             u32 size_lba;

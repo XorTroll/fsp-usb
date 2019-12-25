@@ -25,7 +25,7 @@ namespace fspusb::impl {
 
     void Drive::Unmount() {
         if(this->mounted) {
-            f_mount(NULL, this->mount_name, 1);
+            f_mount(nullptr, this->mount_name, 1);
             memset(&this->fat_fs, 0, sizeof(this->fat_fs));
             memset(this->mount_name, 0, 0x10);
             this->mounted = false;

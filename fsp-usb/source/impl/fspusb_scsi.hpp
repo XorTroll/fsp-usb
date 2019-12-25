@@ -204,6 +204,10 @@ namespace fspusb::impl {
                 return 0xFF;
             }
 
+            u32 GetBlockSize() {
+                return this->block_size;
+            }
+
             bool Ok() {
                 if(this->device == nullptr) {
                     return false;

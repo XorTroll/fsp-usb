@@ -5,6 +5,8 @@
 #include <dirent.h>
 #include <string>
 #include <iostream>
+#include <cmath>
+#include <sstream>
 
 extern "C"
 {
@@ -88,6 +90,18 @@ void TestFsType()
     }
 }
 
+std::string FormatSize(u64 Bytes)
+{
+    std::string sufs[] = { " bytes", " KB", " MB", " GB", " TB", " PB", " EB" };
+    if(Bytes == 0) return "0" + sufs[0];
+    u32 plc = floor((log(Bytes) / log(1024)));
+    double btnum = (double)(Bytes / pow(1024, plc));
+    double rbt = ((int)(btnum * 100.0) / 100.0);
+    std::stringstream strm;
+    strm << rbt;
+    return (strm.str() + sufs[plc]);
+}
+
 void TestFileSystem()
 {
     LOG("Searching for drives...")
@@ -107,7 +121,13 @@ void TestFileSystem()
             rc = fspusbOpenDriveFileSystem(drv, &drvfs);
             if(R_SUCCEEDED(rc))
             {
-                LOG("Opened drive's filesystem. Mounting it...")
+                s64 free_space = 0;
+                s64 total_space = 0;
+                fsFsGetFreeSpace(&drvfs, "/", &free_space);
+                fsFsGetTotalSpace(&drvfs, "/", &total_space);
+
+                LOG("Opened drive's filesystem { " << FormatSize(free_space) << " / " << FormatSize(total_space) << " }")
+                LOG("Mounting it...")
                 int res = fsdevMountDevice("usbdrv", drvfs); // Mount the filesystem as usbdrv:/
                 if(res == -1) LOG("Error mounting drive filesystem...")
                 else
@@ -145,6 +165,15 @@ void TestFileSystem()
     }
 }
 
+void WaitForInput()
+{
+    while(appletMainLoop())
+    {
+        hidScanInput();
+        if(hidKeysDown(CONTROLLER_P1_AUTO)) break;
+    }
+}
+
 int main()
 {
     socketInitializeDefault();
@@ -158,19 +187,15 @@ int main()
         // Run all tests
         TestFsType();
         LOG(" --- ")
+        WaitForInput();
         TestGetSetLabel();
         LOG(" --- ")
+        WaitForInput();
         TestFileSystem();
 
         fspusbExit();
     }
     else LOG("Error accessing fsp-usb: 0x" << std::hex << rc)
-
-    while(appletMainLoop())
-    {
-        hidScanInput();
-        if(hidKeysDown(CONTROLLER_P1_AUTO)) break;
-    }
 
     consoleExit(NULL);
     socketExit();

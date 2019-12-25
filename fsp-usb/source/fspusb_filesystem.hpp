@@ -209,14 +209,19 @@ namespace fspusb {
                 char ffpath[FS_MAX_PATH] = {0};
                 this->NormalizePath(ffpath, path);
 
+                u32 block_size = 0;
+                this->DoWithDrive([&](impl::DrivePointer &drive_ptr) {
+                    block_size = drive_ptr->GetBlockSize();
+                });
+
                 auto ffrc = FR_OK;
                 this->DoWithDriveFATFS([&](FATFS *fatfs) {
-                    FATFS *fs = NULL;
+                    FATFS *fs = nullptr;
                     DWORD clstrs = 0;
                     ffrc = f_getfree(ffpath, &clstrs, &fs);
                     if(ffrc == FR_OK) {
                         if(fs) {
-                            *out = (s64)(clstrs * fs->csize);
+                            *out = (s64)(clstrs * fs->csize) * block_size;
                         }
                     }
                 });
@@ -230,14 +235,19 @@ namespace fspusb {
                 char ffpath[FS_MAX_PATH] = {0};
                 this->NormalizePath(ffpath, path);
 
+                u32 block_size = 0;
+                this->DoWithDrive([&](impl::DrivePointer &drive_ptr) {
+                    block_size = drive_ptr->GetBlockSize();
+                });
+
                 auto ffrc = FR_OK;
                 this->DoWithDriveFATFS([&](FATFS *fatfs) {
-                    FATFS *fs = NULL;
+                    FATFS *fs = nullptr;
                     DWORD clstrs = 0;
                     ffrc = f_getfree(ffpath, &clstrs, &fs);
                     if(ffrc == FR_OK) {
                         if(fs) {
-                            *out = (s64)((fs->n_fatent - 2) * fs->csize);
+                            *out = (s64)((fs->n_fatent - 2) * fs->csize) * block_size;
                         }
                     }
                 });

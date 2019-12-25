@@ -47,6 +47,14 @@ namespace fspusb::impl {
                 return 0xFF;
             }
 
+            u32 GetBlockSize()
+            {
+                if(this->scsi_context != nullptr) {
+                    return this->scsi_context->GetBlock()->GetBlockSize();
+                }
+                return 0;
+            }
+
             bool IsSCSIOk() {
                 if(this->scsi_context != nullptr) {
                     return this->scsi_context->Ok();
