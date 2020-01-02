@@ -75,8 +75,18 @@ namespace fspusb::impl {
             SCSITestUnitReadyCommand();
             virtual SCSIBuffer ProduceBuffer();
     };
+    
+    class SCSIRequestSenseCommand : public SCSICommand 
+    {
+        private:
+            u8 allocation_length;
+            u8 opcode;
 
-
+        public:
+            SCSIRequestSenseCommand(u8 alloc_len);
+            virtual SCSIBuffer ProduceBuffer();
+    };
+    
     class SCSIReadCapacityCommand : public SCSICommand {
 
         private:
@@ -147,62 +157,18 @@ namespace fspusb::impl {
             }
     };
 
-    struct MBRPartition {
-        u8 active;
-        u8 pad1[3];
-        u8 partition_type;
-        u8 pad2[3];
-        u32 start_lba;
-        u32 num_sectors;
-    };
-
-    class SCSIBlock;
-
-    class SCSIBlockPartition {
-        
-        private:
-            SCSIBlock *block;
-            u32 start_lba_offset;
-            u32 lba_size;
-            bool empty;
-
-        public:
-            SCSIBlockPartition() : block(nullptr), start_lba_offset(0), lba_size(0), empty(true) {}
-            SCSIBlockPartition(SCSIBlock *blk, MBRPartition partition_info) : block(blk), start_lba_offset(partition_info.start_lba), lba_size(partition_info.num_sectors), empty(false) {}
-
-            int ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors);
-            int WriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors);
-
-            bool IsEmpty() {
-                return this->empty;
-            }
-    };
-
     class SCSIBlock {
         
         private:
             u64 capacity;
             u32 block_size;
-            SCSIBlockPartition partitions[4];
-            MBRPartition partition_infos[4];
             SCSIDevice *device;
             bool ok;
 
         public:
             SCSIBlock(SCSIDevice *dev);
-            int ReadPartitionSectors(u32 part_idx, u8 *buffer, u32 sector_offset, u32 num_sectors);
-            int WritePartitionSectors(u32 part_idx, const u8 *buffer, u32 sector_offset, u32 num_sectors);
             int ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors);
             int WriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors);
-
-            u32 GetFirstValidPartitionIndex() {
-                for(u32 i = 0; i < 4; i++) {
-                    if(!this->partitions[i].IsEmpty()) {
-                        return i;
-                    }
-                }
-                return 0xFF;
-            }
 
             u32 GetBlockSize() {
                 return this->block_size;

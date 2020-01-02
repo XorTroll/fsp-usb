@@ -40,13 +40,6 @@ namespace fspusb::impl {
                 return this->scsi_context;
             }
 
-            u32 GetValidPartitionIndex() {
-                if(this->scsi_context != nullptr) {
-                    return this->scsi_context->GetBlock()->GetFirstValidPartitionIndex();
-                }
-                return 0xFF;
-            }
-
             u32 GetBlockSize()
             {
                 if(this->scsi_context != nullptr) {
@@ -62,9 +55,9 @@ namespace fspusb::impl {
                 return false;
             }
 
-            DRESULT DoReadSectors(u32 part_idx, u8 *buffer, u32 sector_offset, u32 num_sectors) {
+            DRESULT DoReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors) {
                 if(this->scsi_context != nullptr) {
-                    int res = this->scsi_context->GetBlock()->ReadPartitionSectors(part_idx, buffer, sector_offset, num_sectors);
+                    int res = this->scsi_context->GetBlock()->ReadSectors(buffer, sector_offset, num_sectors);
                     if(res != 0) {
                         return RES_OK;
                     }
@@ -72,9 +65,9 @@ namespace fspusb::impl {
                 return RES_PARERR;
             }
 
-            DRESULT DoWriteSectors(u32 part_idx, const u8 *buffer, u32 sector_offset, u32 num_sectors) {
+            DRESULT DoWriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors) {
                 if(this->scsi_context != nullptr) {
-                    int res = this->scsi_context->GetBlock()->WritePartitionSectors(part_idx, buffer, sector_offset, num_sectors);
+                    int res = this->scsi_context->GetBlock()->WriteSectors(buffer, sector_offset, num_sectors);
                     if(res != 0) {
                         return RES_OK;
                     }

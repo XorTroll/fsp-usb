@@ -7,6 +7,30 @@
 #include "ff.h"
 #include <stdlib.h>
 
+#if !FF_FS_READONLY && !FF_FS_NORTC /* Get system time */
+#include <switch.h>
+#include <time.h>
+
+DWORD get_fattime(void)
+{
+    u64 timestamp = 0;
+    DWORD output = 0;
+    
+    Result rc = timeGetCurrentTime(TimeType_LocalSystemClock, &timestamp);
+    if (R_SUCCEEDED(rc))
+    {
+        time_t rawtime = (time_t)timestamp;
+        struct tm *timeinfo = localtime(&rawtime);
+        output = FAT_TIMESTAMP(timeinfo->tm_year, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    } else {
+        // Fallback to FF_NORTC definitions if the call failed
+        output = FAT_TIMESTAMP(FF_NORTC_YEAR, FF_NORTC_MON, FF_NORTC_MDAY, 0, 0, 0);
+    }
+    
+    return output;
+}
+#endif
+
 #if FF_USE_LFN == 3	/* Dynamic memory allocation */
 
 /*------------------------------------------------------------------------*/

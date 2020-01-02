@@ -104,6 +104,22 @@ namespace fspusb::impl {
         return buf;
     }
 
+    SCSIRequestSenseCommand::SCSIRequestSenseCommand(u8 alloc_len) : SCSICommand(alloc_len, SCSIDirection::In, 0, 5) {
+        this->opcode = 0x03;
+        this->allocation_length = alloc_len;
+    }
+
+    SCSIBuffer SCSIRequestSenseCommand::ProduceBuffer() {
+        SCSIBuffer buf;
+        this->WriteHeader(buf);
+
+        buf.Write8(this->opcode);
+        buf.WritePadding(4);
+        buf.Write8(this->allocation_length);
+
+        return buf;
+    }
+
     SCSIReadCapacityCommand::SCSIReadCapacityCommand() : SCSICommand(0x8, SCSIDirection::In, 0, 0x10) {
         this->opcode = 0x25;
     }
@@ -219,140 +235,106 @@ namespace fspusb::impl {
 
     SCSICommandStatus SCSIDevice::TransferCommand(SCSICommand &c, u8 *buffer, size_t buffer_size) {
         if(this->ok) {
+            Result rc = 0;
+            
             this->PushCommand(c);
             u32 transfer_length = c.GetDataTransferLength();
             u32 transferred = 0;
             u32 total_transferred = 0;
-
-            if(transfer_length > 0) {
-                if(c.GetDirection() == SCSIDirection::In) {
+            
+            if (this->ok && transfer_length > 0)
+            {
+                if (c.GetDirection() == SCSIDirection::In) {
                     while(total_transferred < transfer_length) {
                         memset(this->buf_b, 0, BufferSize);
-                        auto rc = usbHsEpPostBuffer(this->out_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
-                        if(R_SUCCEEDED(rc)) {
-                            if(transferred == 13)
-                            {
-                                u32 signature;
-                                memcpy(&signature, this->buf_b, 4);
-                                if(signature == SCSI_CSW_SIGNATURE) {
-
-                                    /* We weren't expecting a CSW, but we got one anyway */
-                                    SCSICommandStatus status = {};
-                                    memcpy(&status, this->buf_b, sizeof(status));
-
-                                    return status;
-                                }
+                        
+                        rc = usbHsEpPostBuffer(this->out_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
+                        if (R_FAILED(rc)) break;
+                        
+                        if (transferred == SCSI_CSW_SIZE)
+                        {
+                            u32 signature;
+                            memcpy(&signature, this->buf_b, 4);
+                            if(signature == SCSI_CSW_SIGNATURE) {
+                                /* We weren't expecting a CSW, but we got one anyway */
+                                SCSICommandStatus status = {};
+                                memcpy(&status, this->buf_b, sizeof(status));
+                                return status;
                             }
-
-                            memcpy(buffer + total_transferred, this->buf_b, transferred);
-                            total_transferred += transferred;
                         }
-                        else {
-                            this->ok = false;
-                            break;
-                        }
+                        
+                        memcpy(buffer + total_transferred, this->buf_b, transferred);
+                        total_transferred += transferred;
                     }
-                }
-                else {
+                } else {
                     while(total_transferred < transfer_length) {
                         memcpy(this->buf_b, buffer + total_transferred, transfer_length - total_transferred);
-                        auto rc = usbHsEpPostBuffer(this->in_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
-                        if(R_SUCCEEDED(rc)) {
-                            total_transferred += transferred;
-                        }
-                        else {
-                            this->ok = false;
-                            break;
-                        }
+                        
+                        rc = usbHsEpPostBuffer(this->in_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
+                        if (R_FAILED(rc)) break;
+                        
+                        total_transferred += transferred;
                     }
                 }
             }
+            
+            if (this->ok && R_FAILED(rc)) this->ok = false;
         }
 
         return this->ReadStatus();
     }
 
-    int SCSIBlockPartition::ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors) {
-        if(this->block == nullptr) {
-            return 0;
-        }
-        return this->block->ReadSectors(buffer, sector_offset + this->start_lba_offset, num_sectors);
-    }
-
-    int SCSIBlockPartition::WriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors) {
-        if(this->block == nullptr) {
-            return 0;
-        }
-        return this->block->WriteSectors(buffer, sector_offset + this->start_lba_offset, num_sectors);
-    }
-
     SCSIBlock::SCSIBlock(SCSIDevice *dev) : device(dev), ok(true) {
-        SCSIInquiryCommand inquiry(36);
+        SCSIInquiryCommand inquiry(0x24);
+        u8 inquiry_response[0x24] = {0};
+        
         SCSITestUnitReadyCommand test_unit_ready;
+        
+        SCSIRequestSenseCommand request_sense(0x14);
+        u8 request_sense_response[0x14] = {0};
+        
         SCSIReadCapacityCommand read_capacity;
-        u8 inquiry_response[36] = {0};
-        SCSICommandStatus status = this->device->TransferCommand(inquiry, inquiry_response, 36);
+        
+        SCSICommandStatus status;
+        
+        status = this->device->TransferCommand(inquiry, inquiry_response, 0x24);
+        
         status = this->device->TransferCommand(test_unit_ready, nullptr, 0);
-        if(status.status == 0) {
+        if (status.status == 0x01 || status.status == 0x02) // CHECK_CONDITION / CONDITION_GOOD
+        {
+            this->ok = true;
+            SCSICommandStatus rs_status = this->device->TransferCommand(request_sense, request_sense_response, 0x14);
+            if (rs_status.status == 0) status = rs_status;
+            
+            // We may need to further analyze these responses...
+            /*FILE *rsresp = fopen("sdmc:/rsresp.bin", "wb");
+            if (rsresp)
+            {
+                fwrite(request_sense_response, 1, 0x14, rsresp);
+                fclose(rsresp);
+            }*/
+        }
+        
+        if (status.status == 0) {
             u8 read_capacity_response[8] = {0};
             u32 size_lba;
             u32 lba_bytes;
+            
             status = this->device->TransferCommand(read_capacity, read_capacity_response, 8);
+            
             memcpy(&size_lba, &read_capacity_response[0], 4);
             size_lba = __builtin_bswap32(size_lba);
+            
             memcpy(&lba_bytes, &read_capacity_response[4], 4);
             lba_bytes = __builtin_bswap32(lba_bytes);
-            this->capacity = size_lba * lba_bytes;
-            this->block_size = lba_bytes;
-            u8 mbr[0x200];
-            this->ReadSectors(mbr, 0, 1);
-            memcpy(&this->partition_infos[0], &mbr[0x1be], sizeof(this->partition_infos[0]));
-            memcpy(&this->partition_infos[1], &mbr[0x1ce], sizeof(this->partition_infos[1]));
-            memcpy(&this->partition_infos[2], &mbr[0x1de], sizeof(this->partition_infos[2]));
-            memcpy(&this->partition_infos[3], &mbr[0x1ee], sizeof(this->partition_infos[3]));
-
-            bool all_empty = true;
-            for(u32 i = 0; i < 4; i++) {
-                if(this->partition_infos[i].partition_type != 0) {
-                    this->partitions[i] = SCSIBlockPartition(this, this->partition_infos[i]);
-                    all_empty = false;
-                }
-            }
             
-            /* If all partitions aren't initialized... :P */
-            if(all_empty) {
-                this->ok = false;
-            }
-        }
-        else {
+            this->capacity = (u64)(size_lba * lba_bytes);
+            this->block_size = lba_bytes;
+            
+            if (!this->capacity || !this->block_size) this->ok = false;
+        } else {
             this->ok = false;
         }
-    }
-
-    int SCSIBlock::ReadPartitionSectors(u32 part_idx, u8 *buffer, u32 sector_offset, u32 num_sectors) {
-        if(!this->Ok()) {
-            return 0;
-        }
-        if(part_idx > 3) {
-            return 0;
-        }
-        if(this->partitions[part_idx].IsEmpty()) {
-            return 0;
-        }
-        return this->partitions[part_idx].ReadSectors(buffer, sector_offset, num_sectors);
-    }
-
-    int SCSIBlock::WritePartitionSectors(u32 part_idx, const u8 *buffer, u32 sector_offset, u32 num_sectors) {
-        if(!this->Ok()) {
-            return 0;
-        }
-        if(part_idx > 3) {
-            return 0;
-        }
-        if(this->partitions[part_idx].IsEmpty()) {
-            return 0;
-        }
-        return this->partitions[part_idx].WriteSectors(buffer, sector_offset, num_sectors);
     }
 
     int SCSIBlock::ReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors) {

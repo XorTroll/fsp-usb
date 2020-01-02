@@ -55,6 +55,9 @@ void __appInit(void) {
 
     sm::DoWithSession([&]() {
 
+        /* Used for FS timestamps */
+        R_ASSERT(timeInitialize());
+
         /* Used for logging (temporary) */
         R_ASSERT(fsInitialize());
         R_ASSERT(fsdevMountSdmc());
@@ -73,6 +76,9 @@ void __appExit(void) {
     /* Used for logging (temporary) */
     fsdevUnmountAll();
     fsExit();
+
+    /* Used for FS timestamps */
+    timeExit();
 
     fspusb::impl::FinalizeManager();
 }

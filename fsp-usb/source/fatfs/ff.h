@@ -335,6 +335,20 @@ TCHAR* f_gets (TCHAR* buff, int len, FIL* fp);						/* Get a string from the fil
 /* Additional user defined functions                            */
 
 /* RTC function */
+#define FAT_TIMESTAMP(year, mon, mday, hour, min, sec)	({ \
+    DWORD fat_year = (DWORD)year, fat_mon = (DWORD)mon, fat_mday = (DWORD)mday, fat_hour = (DWORD)hour, fat_min = (DWORD)min, fat_sec = (DWORD)sec; \
+    if (fat_year < 1980 || fat_year > 2107) fat_year = FF_NORTC_YEAR; \
+    fat_year -= 1980; \
+    if (fat_mon < 1 || fat_mon > 12) fat_mon = FF_NORTC_MON; \
+    if (fat_mday < 1 || fat_mday > 31) fat_mday = FF_NORTC_MDAY; \
+    if (fat_hour > 23) fat_hour = 0; \
+    if (fat_min > 59) fat_min = 0; \
+    if (fat_sec > 58) fat_sec = 58; \
+    fat_sec /= 2; \
+    DWORD timestamp = (((fat_year << 25) & (DWORD)0xFE000000) | ((fat_mon << 21) & (DWORD)0x01E00000) | ((fat_mday << 16) & (DWORD)0x001F0000) | ((fat_hour << 11) & (DWORD)0x0000F800) | ((fat_min << 5) & (DWORD)0x000007E0) | (fat_sec & (DWORD)0x0000001F)); \
+    timestamp; \
+})
+
 #if !FF_FS_READONLY && !FF_FS_NORTC
 DWORD get_fattime (void);
 #endif
