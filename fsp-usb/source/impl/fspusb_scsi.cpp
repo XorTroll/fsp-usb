@@ -229,6 +229,8 @@ namespace fspusb::impl {
     }
 
     SCSICommandStatus SCSIDevice::TransferCommand(SCSICommand &c, u8 *buffer) {
+        SCSICommandStatus status = {};
+        
         if(this->ok) {
             Result rc = 0;
             
@@ -252,7 +254,6 @@ namespace fspusb::impl {
                         
                         if (transferred == SCSI_CSW_SIZE)
                         {
-                            SCSICommandStatus status = {};
                             memcpy(&status, this->buf_b, sizeof(status));
                             if (status.signature == SCSI_CSW_SIGNATURE && status.tag == SCSI_TAG) {
                                 /* We weren't expecting a CSW, but we got one anyway */
@@ -280,22 +281,24 @@ namespace fspusb::impl {
                 }
             }
         }
-
-        return this->ReadStatus();
+        
+        status = this->ReadStatus();
+        return status;
     }
 
     SCSIBlock::SCSIBlock(SCSIDevice *dev) : device(dev), ok(true) {
+        SCSICommandStatus status;
+        
+        //SCSIInquiryCommand inquiry(SCSI_INQUIRY_REPLY_LEN);
+        //u8 inquiry_response[SCSI_INQUIRY_REPLY_LEN] = {0};
+        
         SCSITestUnitReadyCommand test_unit_ready;
         
         SCSIRequestSenseCommand request_sense(SCSI_REQUEST_SENSE_REPLY_LEN);
         u8 request_sense_response[SCSI_REQUEST_SENSE_REPLY_LEN] = {0};
         
-        //SCSIInquiryCommand inquiry(SCSI_INQUIRY_REPLY_LEN);
-        //u8 inquiry_response[SCSI_INQUIRY_REPLY_LEN] = {0};
-        
         SCSIReadCapacityCommand read_capacity;
-        
-        SCSICommandStatus status;
+        u8 read_capacity_response[SCSI_READ_CAPACITY_REPLY_LEN] = {0};
         
         //status = this->device->TransferCommand(inquiry, inquiry_response);
         
@@ -346,22 +349,22 @@ namespace fspusb::impl {
         }
         
         if (this->ok && status.status == SCSI_CMD_STATUS_SUCCESS) {
-            u8 read_capacity_response[8] = {0};
             u32 size_lba;
             u32 lba_bytes;
             
             status = this->device->TransferCommand(read_capacity, read_capacity_response);
-            
-            memcpy(&size_lba, &read_capacity_response[0], 4);
-            size_lba = __builtin_bswap32(size_lba);
-            
-            memcpy(&lba_bytes, &read_capacity_response[4], 4);
-            lba_bytes = __builtin_bswap32(lba_bytes);
-            
-            this->capacity = (u64)(size_lba * lba_bytes);
-            this->block_size = lba_bytes;
-            
-            if (!this->capacity || !this->block_size) this->ok = false;
+            if (this->ok && status.status == SCSI_CMD_STATUS_SUCCESS) {
+                memcpy(&size_lba, &read_capacity_response[0], 4);
+                size_lba = __builtin_bswap32(size_lba);
+                
+                memcpy(&lba_bytes, &read_capacity_response[4], 4);
+                lba_bytes = __builtin_bswap32(lba_bytes);
+                
+                this->capacity = (u64)(size_lba * lba_bytes);
+                this->block_size = lba_bytes;
+                
+                if (!this->capacity || !this->block_size) this->ok = false;
+            }
         }
     }
 

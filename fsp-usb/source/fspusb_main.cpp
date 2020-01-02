@@ -101,11 +101,6 @@ namespace {
 }
 
 int main(int argc, char **argv) {
-    
-    ams::os::Thread usb_thread;
-    R_ASSERT(usb_thread.Initialize(&fspusb::impl::ManagerUpdateThread, nullptr, 0x4000, 0x15));
-    R_ASSERT(usb_thread.Start());
-
     R_ASSERT(g_server_manager.RegisterServer<fspusb::Service>(ServiceName, MaxSessions));
 
     g_server_manager.LoopProcess();

@@ -4,18 +4,24 @@
 
 namespace fspusb::impl {
 
+    ams::os::Thread usb_thread;
     ams::os::Mutex g_usb_manager_lock;
     std::vector<DrivePointer> g_usb_manager_drives;
-    Event g_usb_manager_interface_available_event;
-    UsbHsInterfaceFilter g_usb_manager_device_filter = {};
+    UsbHsInterfaceFilter g_usb_manager_device_filter;
     bool g_usb_manager_initialized = false;
 
-    Result InitializeManager() {
+    Event g_usb_manager_interface_available_event;
+    Event g_usb_manager_thread_exit_event;
 
+    Result InitializeManager() {
         std::scoped_lock lk(g_usb_manager_lock);
         if(g_usb_manager_initialized) {
             return 0;
         }
+
+        memset(&g_usb_manager_device_filter, 0, sizeof(UsbHsInterfaceFilter));
+        memset(&g_usb_manager_interface_available_event, 0, sizeof(Event));
+        memset(&g_usb_manager_thread_exit_event, 0, sizeof(Event));
 
         auto rc = usbHsInitialize();
         if(R_SUCCEEDED(rc)) {
@@ -24,16 +30,28 @@ namespace fspusb::impl {
             g_usb_manager_device_filter.bInterfaceClass = USB_CLASS_MASS_STORAGE;
             g_usb_manager_device_filter.bInterfaceSubClass = MASS_STORAGE_SCSI_COMMANDS;
             g_usb_manager_device_filter.bInterfaceProtocol = MASS_STORAGE_BULK_ONLY;
-            rc = usbHsCreateInterfaceAvailableEvent(&g_usb_manager_interface_available_event, false, 0, &g_usb_manager_device_filter);
+            
+            rc = usbHsCreateInterfaceAvailableEvent(&g_usb_manager_interface_available_event, true, 0, &g_usb_manager_device_filter);
             if(R_SUCCEEDED(rc)) {
-                g_usb_manager_initialized = true;
+                rc = eventCreate(&g_usb_manager_thread_exit_event, true);
+                if (R_SUCCEEDED(rc))
+                {
+                    R_ASSERT(usb_thread.Initialize(&ManagerUpdateThread, nullptr, 0x4000, 0x15));
+                    R_ASSERT(usb_thread.Start());
+                    
+                    g_usb_manager_initialized = true;
+                } else {
+                    usbHsDestroyInterfaceAvailableEvent(&g_usb_manager_interface_available_event, 0);
+                }
+            } else {
+                usbHsExit();
             }
         }
 
         return rc;
     }
 
-    void UpdateLoop() {
+    void UpdateDrives() {
         std::scoped_lock lk(g_usb_manager_lock);
 
         UsbHsInterface iface_block[DriveMax];
@@ -117,21 +135,44 @@ namespace fspusb::impl {
     }
 
     void ManagerUpdateThread(void *arg) {
+        Result rc;
+        s32 idx;
+        
         while(true) {
-            UpdateLoop();
-            svcSleepThread((u64)100000000);
+            // Wait until one of our events is triggered
+            idx = 0;
+            rc = waitMulti(&idx, -1, waiterForEvent(usbHsGetInterfaceStateChangeEvent()), waiterForEvent(&g_usb_manager_interface_available_event), waiterForEvent(&g_usb_manager_thread_exit_event));
+            if (R_SUCCEEDED(rc)) {
+                // Clear InterfaceStateChangeEvent if it was triggered (not an autoclear event)
+                if (idx == 0) eventClear(usbHsGetInterfaceStateChangeEvent());
+                
+                // Break out of the loop if the thread exit user event was fired
+                if (idx == 2) break;
+                
+                // Update drives
+                UpdateDrives();
+            }
         }
     }
 
     void FinalizeManager() {
         if(!g_usb_manager_initialized) return;
+        
         for(auto &drive: g_usb_manager_drives) {
             drive->Unmount();
             drive->Dispose();
         }
+        
         g_usb_manager_drives.clear();
+        
+        // Fire thread exit user event, wait until the thread exits and close the event
+        eventFire(&g_usb_manager_thread_exit_event);
+        R_ASSERT(usb_thread.Join());
+        eventClose(&g_usb_manager_thread_exit_event);
+        
         usbHsDestroyInterfaceAvailableEvent(&g_usb_manager_interface_available_event, 0);
         usbHsExit();
+        
         g_usb_manager_initialized = false;
     }
 

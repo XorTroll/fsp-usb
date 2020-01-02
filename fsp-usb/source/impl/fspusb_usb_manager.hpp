@@ -10,7 +10,7 @@
 namespace fspusb::impl {
 
     Result InitializeManager();
-    void UpdateLoop();
+    void UpdateDrives();
     void ManagerUpdateThread(void *arg);
     void FinalizeManager();
     

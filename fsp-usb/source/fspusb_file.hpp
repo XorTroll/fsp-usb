@@ -71,7 +71,7 @@ namespace fspusb {
 
                 // f_lseek takes care of expanding the file if new_size > cur_size
                 // However, if new_size < cur_size, we must also call f_truncate
-                if (new_size < cur_size) ffrc = f_truncate(&this->file);
+                if (ffrc == FR_OK && new_size < cur_size) ffrc = f_truncate(&this->file);
 
                 return result::CreateFromFRESULT(ffrc);
             }

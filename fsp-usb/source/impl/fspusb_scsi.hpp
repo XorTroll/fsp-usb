@@ -26,20 +26,6 @@
 #define SCSI_REQUEST_SENSE_REPLY_LEN    0x14
 #define SCSI_REQUEST_SENSE_CB_LEN       0x06
 
-#define SCSI_SENSE_NO_SENSE             0x00
-#define SCSI_SENSE_RECOVERED_ERROR      0x01
-#define SCSI_SENSE_NOT_READY            0x02
-#define SCSI_SENSE_MEDIUM_ERROR         0x03
-#define SCSI_SENSE_HARDWARE_ERROR       0x04
-#define SCSI_SENSE_ILLEGAL_REQUEST      0x05
-#define SCSI_SENSE_UNIT_ATTENTION       0x06
-#define SCSI_SENSE_DATA_PROTECT         0x07
-#define SCSI_SENSE_BLANK_CHECK          0x08
-#define SCSI_SENSE_COPY_ABORTED         0x0A
-#define SCSI_SENSE_ABORTED_COMMAND      0x0B
-#define SCSI_SENSE_VOLUME_OVERFLOW      0x0D
-#define SCSI_SENSE_MISCOMPARE           0x0E
-
 #define SCSI_INQUIRY_CMD                0x12
 #define SCSI_INQUIRY_REPLY_LEN          0x24
 #define SCSI_INQUIRY_CB_LEN             0x05
@@ -53,6 +39,20 @@
 
 #define SCSI_WRITE_10_CMD               0x2A
 #define SCSI_WRITE_10_CB_LEN            0x0A
+
+#define SCSI_SENSE_NO_SENSE             0x00
+#define SCSI_SENSE_RECOVERED_ERROR      0x01
+#define SCSI_SENSE_NOT_READY            0x02
+#define SCSI_SENSE_MEDIUM_ERROR         0x03
+#define SCSI_SENSE_HARDWARE_ERROR       0x04
+#define SCSI_SENSE_ILLEGAL_REQUEST      0x05
+#define SCSI_SENSE_UNIT_ATTENTION       0x06
+#define SCSI_SENSE_DATA_PROTECT         0x07
+#define SCSI_SENSE_BLANK_CHECK          0x08
+#define SCSI_SENSE_COPY_ABORTED         0x0A
+#define SCSI_SENSE_ABORTED_COMMAND      0x0B
+#define SCSI_SENSE_VOLUME_OVERFLOW      0x0D
+#define SCSI_SENSE_MISCOMPARE           0x0E
 
 namespace fspusb::impl {
 
