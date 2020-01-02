@@ -15,7 +15,7 @@ namespace fspusb::impl {
         this->idx += len;
     }
 
-    void SCSIBuffer::Write16BE(u32 val) {
+    void SCSIBuffer::Write16BE(u16 val) {
         u16 tmpval = __builtin_bswap16(val);
         memcpy(&this->storage[this->idx], &tmpval, sizeof(u16));
         this->idx += sizeof(u16);
@@ -38,19 +38,14 @@ namespace fspusb::impl {
     }
 
     SCSICommand::SCSICommand(u32 data_tr_len, SCSIDirection dir, u8 ln, u8 cb_len) {
-        this->tag = 0;
+        this->tag = SCSI_TAG;
 
         this->data_transfer_length = data_tr_len;
         this->direction = dir;
         this->lun = ln;
         this->cb_length = cb_len;
 
-        if(dir == SCSIDirection::In) {
-            flags = 0x80;
-        }
-        else {
-            flags = 0;
-        }
+        flags = (dir == SCSIDirection::In ? SCSI_CBW_IN : SCSI_CBW_OUT);
     }
 
     u32 SCSICommand::GetDataTransferLength() {
@@ -75,24 +70,8 @@ namespace fspusb::impl {
         out.Write8(this->cb_length);
     };
 
-    SCSIInquiryCommand::SCSIInquiryCommand(u8 alloc_len) : SCSICommand(alloc_len, SCSIDirection::In, 0, 5) {
-        this->opcode = 0x12;
-        this->allocation_length = alloc_len;
-    }
-
-    SCSIBuffer SCSIInquiryCommand::ProduceBuffer() {
-        SCSIBuffer buf;
-        this->WriteHeader(buf);
-
-        buf.Write8(this->opcode);
-        buf.WritePadding(3);
-        buf.Write8(this->allocation_length);
-
-        return buf;
-    }
-
-    SCSITestUnitReadyCommand::SCSITestUnitReadyCommand() : SCSICommand(0, SCSIDirection::None, 0, 6) {
-        this->opcode = 0;
+    SCSITestUnitReadyCommand::SCSITestUnitReadyCommand() : SCSICommand(SCSI_TEST_UNIT_READY_REPLY_LEN, SCSIDirection::Out, SCSI_DEFAULT_LUN, SCSI_TEST_UNIT_READY_CB_LEN) {
+        this->opcode = SCSI_TEST_UNIT_READY_CMD;
     }
 
     SCSIBuffer SCSITestUnitReadyCommand::ProduceBuffer() {
@@ -104,8 +83,8 @@ namespace fspusb::impl {
         return buf;
     }
 
-    SCSIRequestSenseCommand::SCSIRequestSenseCommand(u8 alloc_len) : SCSICommand(alloc_len, SCSIDirection::In, 0, 5) {
-        this->opcode = 0x03;
+    SCSIRequestSenseCommand::SCSIRequestSenseCommand(u8 alloc_len) : SCSICommand(alloc_len, SCSIDirection::In, SCSI_DEFAULT_LUN, SCSI_REQUEST_SENSE_CB_LEN) {
+        this->opcode = SCSI_REQUEST_SENSE_CMD;
         this->allocation_length = alloc_len;
     }
 
@@ -120,8 +99,24 @@ namespace fspusb::impl {
         return buf;
     }
 
-    SCSIReadCapacityCommand::SCSIReadCapacityCommand() : SCSICommand(0x8, SCSIDirection::In, 0, 0x10) {
-        this->opcode = 0x25;
+    SCSIInquiryCommand::SCSIInquiryCommand(u8 alloc_len) : SCSICommand(alloc_len, SCSIDirection::In, SCSI_DEFAULT_LUN, SCSI_INQUIRY_CB_LEN) {
+        this->opcode = SCSI_INQUIRY_CMD;
+        this->allocation_length = alloc_len;
+    }
+
+    SCSIBuffer SCSIInquiryCommand::ProduceBuffer() {
+        SCSIBuffer buf;
+        this->WriteHeader(buf);
+
+        buf.Write8(this->opcode);
+        buf.WritePadding(3);
+        buf.Write8(this->allocation_length);
+
+        return buf;
+    }
+
+    SCSIReadCapacityCommand::SCSIReadCapacityCommand() : SCSICommand(SCSI_READ_CAPACITY_REPLY_LEN, SCSIDirection::In, SCSI_DEFAULT_LUN, SCSI_READ_CAPACITY_CB_LEN) {
+        this->opcode = SCSI_READ_CAPACITY_CMD;
     }
 
     SCSIBuffer SCSIReadCapacityCommand::ProduceBuffer() {
@@ -133,8 +128,8 @@ namespace fspusb::impl {
         return buf;
     }
 
-    SCSIRead10Command::SCSIRead10Command(u32 block_addr, u32 block_sz, u16 xfer_blocks) : SCSICommand(block_sz * xfer_blocks, SCSIDirection::In, 0, 10) {
-        this->opcode = 0x28;
+    SCSIRead10Command::SCSIRead10Command(u32 block_addr, u32 block_sz, u16 xfer_blocks) : SCSICommand(block_sz * xfer_blocks, SCSIDirection::In, SCSI_DEFAULT_LUN, SCSI_READ_10_CB_LEN) {
+        this->opcode = SCSI_READ_10_CMD;
         this->block_address = block_addr;
         this->transfer_blocks = xfer_blocks;
     }
@@ -153,8 +148,8 @@ namespace fspusb::impl {
         return buf;
     }
 
-    SCSIWrite10Command::SCSIWrite10Command(u32 block_addr, u32 block_sz, u16 xfer_blocks) : SCSICommand(block_sz * xfer_blocks, SCSIDirection::Out, 0, 10) {
-        this->opcode = 0x2a;
+    SCSIWrite10Command::SCSIWrite10Command(u32 block_addr, u32 block_sz, u16 xfer_blocks) : SCSICommand(block_sz * xfer_blocks, SCSIDirection::Out, SCSI_DEFAULT_LUN, SCSI_WRITE_10_CB_LEN) {
+        this->opcode = SCSI_WRITE_10_CMD;
         this->block_address = block_addr;
         this->transfer_blocks = xfer_blocks;
     }
@@ -233,7 +228,7 @@ namespace fspusb::impl {
         }
     }
 
-    SCSICommandStatus SCSIDevice::TransferCommand(SCSICommand &c, u8 *buffer, size_t buffer_size) {
+    SCSICommandStatus SCSIDevice::TransferCommand(SCSICommand &c, u8 *buffer) {
         if(this->ok) {
             Result rc = 0;
             
@@ -241,24 +236,26 @@ namespace fspusb::impl {
             u32 transfer_length = c.GetDataTransferLength();
             u32 transferred = 0;
             u32 total_transferred = 0;
+            u32 block_size = (u32)BufferSize;
             
-            if (this->ok && transfer_length > 0)
+            if (this->ok && buffer != nullptr && transfer_length > 0)
             {
                 if (c.GetDirection() == SCSIDirection::In) {
                     while(total_transferred < transfer_length) {
-                        memset(this->buf_b, 0, BufferSize);
+                        u32 cur_transfer_size = ((transfer_length - total_transferred) > block_size ? block_size : (transfer_length - total_transferred));
                         
-                        rc = usbHsEpPostBuffer(this->out_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
-                        if (R_FAILED(rc)) break;
+                        rc = usbHsEpPostBuffer(this->out_endpoint, this->buf_b, cur_transfer_size, &transferred);
+                        if (R_FAILED(rc) || !transferred) {
+                            this->ok = false;
+                            break;
+                        }
                         
                         if (transferred == SCSI_CSW_SIZE)
                         {
-                            u32 signature;
-                            memcpy(&signature, this->buf_b, 4);
-                            if(signature == SCSI_CSW_SIGNATURE) {
+                            SCSICommandStatus status = {};
+                            memcpy(&status, this->buf_b, sizeof(status));
+                            if (status.signature == SCSI_CSW_SIGNATURE && status.tag == SCSI_TAG) {
                                 /* We weren't expecting a CSW, but we got one anyway */
-                                SCSICommandStatus status = {};
-                                memcpy(&status, this->buf_b, sizeof(status));
                                 return status;
                             }
                         }
@@ -268,43 +265,76 @@ namespace fspusb::impl {
                     }
                 } else {
                     while(total_transferred < transfer_length) {
-                        memcpy(this->buf_b, buffer + total_transferred, transfer_length - total_transferred);
+                        u32 cur_transfer_size = ((transfer_length - total_transferred) > block_size ? block_size : (transfer_length - total_transferred));
                         
-                        rc = usbHsEpPostBuffer(this->in_endpoint, this->buf_b, transfer_length - total_transferred, &transferred);
-                        if (R_FAILED(rc)) break;
+                        memcpy(this->buf_b, buffer + total_transferred, cur_transfer_size);
+                        
+                        rc = usbHsEpPostBuffer(this->in_endpoint, this->buf_b, cur_transfer_size, &transferred);
+                        if (R_FAILED(rc) || !transferred) {
+                            this->ok = false;
+                            break;
+                        }
                         
                         total_transferred += transferred;
                     }
                 }
             }
-            
-            if (this->ok && R_FAILED(rc)) this->ok = false;
         }
 
         return this->ReadStatus();
     }
 
     SCSIBlock::SCSIBlock(SCSIDevice *dev) : device(dev), ok(true) {
-        SCSIInquiryCommand inquiry(0x24);
-        u8 inquiry_response[0x24] = {0};
-        
         SCSITestUnitReadyCommand test_unit_ready;
         
-        SCSIRequestSenseCommand request_sense(0x14);
-        u8 request_sense_response[0x14] = {0};
+        SCSIRequestSenseCommand request_sense(SCSI_REQUEST_SENSE_REPLY_LEN);
+        u8 request_sense_response[SCSI_REQUEST_SENSE_REPLY_LEN] = {0};
+        
+        //SCSIInquiryCommand inquiry(SCSI_INQUIRY_REPLY_LEN);
+        //u8 inquiry_response[SCSI_INQUIRY_REPLY_LEN] = {0};
         
         SCSIReadCapacityCommand read_capacity;
         
         SCSICommandStatus status;
         
-        status = this->device->TransferCommand(inquiry, inquiry_response, 0x24);
+        //status = this->device->TransferCommand(inquiry, inquiry_response);
         
-        status = this->device->TransferCommand(test_unit_ready, nullptr, 0);
-        if (status.status == 0x01 || status.status == 0x02) // CHECK_CONDITION / CONDITION_GOOD
+        status = this->device->TransferCommand(test_unit_ready, nullptr);
+        if (status.status != SCSI_CMD_STATUS_SUCCESS)
         {
-            this->ok = true;
-            SCSICommandStatus rs_status = this->device->TransferCommand(request_sense, request_sense_response, 0x14);
-            if (rs_status.status == 0) status = rs_status;
+            this->ok = true; // Manually set back to true, just in case
+            SCSICommandStatus rs_status = this->device->TransferCommand(request_sense, request_sense_response);
+            if (rs_status.status == SCSI_CMD_STATUS_SUCCESS)
+            {
+                switch(request_sense_response[2] & 0x0F)
+                {
+                    case SCSI_SENSE_NO_SENSE:
+                    case SCSI_SENSE_RECOVERED_ERROR:
+                    case SCSI_SENSE_UNIT_ATTENTION:
+                        // Use Request Sense command status
+                        status = rs_status;
+                        break;
+                    case SCSI_SENSE_ABORTED_COMMAND:
+                        // Retry command
+                        status = this->device->TransferCommand(test_unit_ready, nullptr);
+                        break;
+                    case SCSI_SENSE_NOT_READY:
+                    case SCSI_SENSE_MEDIUM_ERROR:
+                    case SCSI_SENSE_HARDWARE_ERROR:
+                    case SCSI_SENSE_ILLEGAL_REQUEST:
+                    case SCSI_SENSE_DATA_PROTECT:
+                    case SCSI_SENSE_BLANK_CHECK:
+                    case SCSI_SENSE_COPY_ABORTED:
+                    case SCSI_SENSE_VOLUME_OVERFLOW:
+                    case SCSI_SENSE_MISCOMPARE:
+                        this->ok = false;
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+                this->ok = false;
+            }
             
             // We may need to further analyze these responses...
             /*FILE *rsresp = fopen("sdmc:/rsresp.bin", "wb");
@@ -315,12 +345,12 @@ namespace fspusb::impl {
             }*/
         }
         
-        if (status.status == 0) {
+        if (this->ok && status.status == SCSI_CMD_STATUS_SUCCESS) {
             u8 read_capacity_response[8] = {0};
             u32 size_lba;
             u32 lba_bytes;
             
-            status = this->device->TransferCommand(read_capacity, read_capacity_response, 8);
+            status = this->device->TransferCommand(read_capacity, read_capacity_response);
             
             memcpy(&size_lba, &read_capacity_response[0], 4);
             size_lba = __builtin_bswap32(size_lba);
@@ -332,8 +362,6 @@ namespace fspusb::impl {
             this->block_size = lba_bytes;
             
             if (!this->capacity || !this->block_size) this->ok = false;
-        } else {
-            this->ok = false;
         }
     }
 
@@ -342,7 +370,7 @@ namespace fspusb::impl {
             return 0;
         }
         SCSIRead10Command read_ten(sector_offset, this->block_size, num_sectors);
-        this->device->TransferCommand(read_ten, buffer, num_sectors * this->block_size);
+        this->device->TransferCommand(read_ten, buffer);
         return num_sectors;
     }
 
@@ -351,7 +379,7 @@ namespace fspusb::impl {
             return 0;
         }
         SCSIWrite10Command write_ten(sector_offset, this->block_size, num_sectors);
-        this->device->TransferCommand(write_ten, (u8*)buffer, num_sectors * this->block_size);
+        this->device->TransferCommand(write_ten, (u8*)buffer);
         return num_sectors;
     }
 }

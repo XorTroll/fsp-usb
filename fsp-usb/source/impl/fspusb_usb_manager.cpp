@@ -21,9 +21,9 @@ namespace fspusb::impl {
         if(R_SUCCEEDED(rc)) {
             g_usb_manager_device_filter = {};
             g_usb_manager_device_filter.Flags = UsbHsInterfaceFilterFlags_bInterfaceClass | UsbHsInterfaceFilterFlags_bInterfaceSubClass | UsbHsInterfaceFilterFlags_bInterfaceProtocol;
-            g_usb_manager_device_filter.bInterfaceClass = 8;
-            g_usb_manager_device_filter.bInterfaceSubClass = 6;
-            g_usb_manager_device_filter.bInterfaceProtocol = 80;
+            g_usb_manager_device_filter.bInterfaceClass = USB_CLASS_MASS_STORAGE;
+            g_usb_manager_device_filter.bInterfaceSubClass = MASS_STORAGE_SCSI_COMMANDS;
+            g_usb_manager_device_filter.bInterfaceProtocol = MASS_STORAGE_BULK_ONLY;
             rc = usbHsCreateInterfaceAvailableEvent(&g_usb_manager_interface_available_event, false, 0, &g_usb_manager_device_filter);
             if(R_SUCCEEDED(rc)) {
                 g_usb_manager_initialized = true;
@@ -119,7 +119,7 @@ namespace fspusb::impl {
     void ManagerUpdateThread(void *arg) {
         while(true) {
             UpdateLoop();
-            svcSleepThread(100'000'000L);
+            svcSleepThread((u64)100000000);
         }
     }
 

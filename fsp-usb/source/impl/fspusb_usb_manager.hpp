@@ -3,6 +3,10 @@
 #include "fspusb_drive.hpp"
 #include <functional>
 
+#define USB_CLASS_MASS_STORAGE      0x08
+#define MASS_STORAGE_SCSI_COMMANDS  0x06
+#define MASS_STORAGE_BULK_ONLY      0x50
+
 namespace fspusb::impl {
 
     Result InitializeManager();
