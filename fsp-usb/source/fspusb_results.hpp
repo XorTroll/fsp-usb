@@ -10,7 +10,7 @@ namespace fspusb {
     /* Use custom results from 8000 to 8999, since FS uses almost to 7000 :P */
     /* FATFS errors are converted below, those who aren't handled are returned as 8100 + the error */
 
-    R_DEFINE_ERROR_RESULT(InvalidDriveIndex,           8001);
+    R_DEFINE_ERROR_RESULT(InvalidDriveInterfaceId,     8001);
     R_DEFINE_ERROR_RESULT(DriveUnavailable,            8002);
     R_DEFINE_ERROR_RESULT(DriveInitializationFailure,  8003);
 

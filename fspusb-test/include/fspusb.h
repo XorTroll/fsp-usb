@@ -24,8 +24,8 @@ void fspusbExit(void);
 /// Gets the Service object for the actual fsp-usb service session.
 Service* fspusbGetServiceSession(void);
 
-Result fspusbGetMountedDriveCount(u32 *out_count);
-Result fspusbGetDriveFileSystemType(u32 index, FspUsbFileSystemType *out_type);
-Result fspusbGetDriveLabel(u32 index, char *out_label, size_t out_label_size);
-Result fspusbSetDriveLabel(u32 index, const char *label);
-Result fspusbOpenDriveFileSystem(u32 index, FsFileSystem *out_fs);
+Result fspusbListMountedDrives(s32 *drives_buf, size_t drive_count, s32 *out_total);
+Result fspusbGetDriveFileSystemType(s32 interface_id, FspUsbFileSystemType *out_type);
+Result fspusbGetDriveLabel(s32 interface_id, char *out_label, size_t out_label_size);
+Result fspusbSetDriveLabel(s32 interface_id, const char *label);
+Result fspusbOpenDriveFileSystem(s32 interface_id, FsFileSystem *out_fs);

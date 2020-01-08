@@ -6,7 +6,7 @@ extern "C" {
 
     u32 __nx_applet_type = AppletType_None;
 
-    #define INNER_HEAP_SIZE 0x20000
+    #define INNER_HEAP_SIZE 0x40000
     size_t nx_inner_heap_size = INNER_HEAP_SIZE;
     char   nx_inner_heap[INNER_HEAP_SIZE];
 
@@ -58,9 +58,11 @@ void __appInit(void) {
         /* Used for FS timestamps */
         R_ASSERT(timeInitialize());
 
-        /* Used for logging (temporary) */
+#ifdef FSP_USB_DEBUG
+        /* Used for logging */
         R_ASSERT(fsInitialize());
         R_ASSERT(fsdevMountSdmc());
+#endif
 
         ::Result rc;
         do {
@@ -73,9 +75,11 @@ void __appInit(void) {
 
 void __appExit(void) {
 
-    /* Used for logging (temporary) */
+#ifdef FSP_USB_DEBUG
+    /* Used for logging */
     fsdevUnmountAll();
     fsExit();
+#endif
 
     /* Used for FS timestamps */
     timeExit();
@@ -92,7 +96,7 @@ namespace {
             static constexpr size_t MaxDomains = 0x40;
             static constexpr size_t MaxDomainObjects = 0x4000;
         };
-        /* Same options as fsp-srv, this will be a service with similar behaviour */
+        /* Same options as fsp-srv, since this is a service with similar behaviour */
 
         constexpr size_t MaxServers = 1;
         constexpr size_t MaxSessions = 61;

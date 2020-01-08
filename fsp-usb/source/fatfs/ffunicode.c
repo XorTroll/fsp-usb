@@ -27,7 +27,7 @@
 
 #if FF_USE_LFN	/* This module will be blanked at non-LFN configuration */
 
-#if FF_DEFINED != 86604	/* Revision ID */
+#if FF_DEFINED != 86606	/* Revision ID */
 #error Wrong include file (ff.h).
 #endif
 

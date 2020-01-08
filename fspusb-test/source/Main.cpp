@@ -8,87 +8,13 @@
 #include <cmath>
 #include <sstream>
 
-extern "C"
-{
+extern "C" {
     #include "fspusb.h"
 }
 
-#define LOG(...) { std::cout << __VA_ARGS__ << std::endl; consoleUpdate(NULL); }
+#define CONSOLE_PRINT(...) { std::cout << __VA_ARGS__ << std::endl; consoleUpdate(NULL); }
 
-void TestGetSetLabel()
-{
-    LOG("Searching for drives...")
-
-    u32 count = 0;
-    auto rc = fspusbGetMountedDriveCount(&count);
-    if(R_SUCCEEDED(rc))
-    {
-        LOG("Found " << count << " drives")
-        if(count > 0)
-        {
-            // Test with the 1st drive
-            u32 drv = 0;
-            LOG("Using first drive...")
-
-            char label[0x10] = {0};
-            rc = fspusbGetDriveLabel(drv, label, 0x10);
-            if(R_SUCCEEDED(rc)) LOG("Got drive's label: '" << label << "'")
-            else LOG("Error getting drive's label: 0x" << std::hex << rc)
-
-            LOG("Setting new drive label...")
-            const char *newlabel = "TEST USB";
-            rc = fspusbSetDriveLabel(drv, newlabel);
-            if(R_SUCCEEDED(rc)) LOG("Drive label set to: '" << newlabel << "'")
-            else LOG("Error setting drive's label: 0x" << std::hex << rc)
-
-        }
-    }
-}
-
-void TestFsType()
-{
-    LOG("Searching for drives...")
-
-    u32 count = 0;
-    auto rc = fspusbGetMountedDriveCount(&count);
-    if(R_SUCCEEDED(rc))
-    {
-        LOG("Found " << count << " drives")
-        if(count > 0)
-        {
-            // Test with the 1st drive
-            u32 drv = 0;
-            LOG("Using first drive...")
-
-            FspUsbFileSystemType fstype;
-            rc = fspusbGetDriveFileSystemType(drv, &fstype);
-            if(R_SUCCEEDED(rc))
-            {
-                const char *fs = "<unknown type>";
-                switch(fstype)
-                {
-                    case FspUsbFileSystemType_FAT12:
-                        fs = "FAT12";
-                        break;
-                    case FspUsbFileSystemType_FAT16:
-                        fs = "FAT16";
-                        break;
-                    case FspUsbFileSystemType_FAT32:
-                        fs = "FAT32";
-                        break;
-                    case FspUsbFileSystemType_exFAT:
-                        fs = "exFAT";
-                        break;
-                    default:
-                        break;
-                }
-                LOG("Drive's filesystem type: " << fs)
-            }
-            else LOG("Error getting drive's filesystem type: 0x" << std::hex << rc)
-
-        }
-    }
-}
+#define CONSOLE_RESULT(ctx, rc) CONSOLE_PRINT(" * An error ocurred " ctx ": 0x" << std::hex << rc << std::dec)
 
 std::string FormatSize(u64 Bytes)
 {
@@ -102,67 +28,99 @@ std::string FormatSize(u64 Bytes)
     return (strm.str() + sufs[plc]);
 }
 
-void TestFileSystem()
+void PerformDriveTest(s32 drive_iface_id)
 {
-    LOG("Searching for drives...")
+    CONSOLE_PRINT("Testing with drive (ID " << drive_iface_id << ")")
 
-    u32 count = 0;
-    auto rc = fspusbGetMountedDriveCount(&count);
-    if(R_SUCCEEDED(rc))
+    // Labels are <=11 characters anyway
+    char label[0x10] = {0};
+    auto rc = fspusbGetDriveLabel(drive_iface_id, label, 0x10);
+    if(R_SUCCEEDED(rc)) CONSOLE_PRINT(" - Drive label: " << label)
+    else CONSOLE_RESULT("getting the drive's label", rc)
+
+    const char *new_label = "NEW LABEL";
+    CONSOLE_PRINT("Press A to set the drive's label to '" << new_label << "', or any key to skip this test.")
+    while(appletMainLoop())
     {
-        LOG("Found " << count << " drives")
-        if(count > 0)
+        hidScanInput();
+        auto k = hidKeysDown(CONTROLLER_P1_AUTO);
+        if (k)
         {
-            // Test with the 1st drive
-            u32 drv = 0;
-            LOG("Using first drive...")
-
-            FsFileSystem drvfs;
-            rc = fspusbOpenDriveFileSystem(drv, &drvfs);
-            if(R_SUCCEEDED(rc))
+            if(k & KEY_A)
             {
-                s64 free_space = 0;
-                s64 total_space = 0;
-                fsFsGetFreeSpace(&drvfs, "/", &free_space);
-                fsFsGetTotalSpace(&drvfs, "/", &total_space);
-
-                LOG("Opened drive's filesystem { " << FormatSize(free_space) << " / " << FormatSize(total_space) << " }")
-                LOG("Mounting it...")
-                int res = fsdevMountDevice("usbdrv", drvfs); // Mount the filesystem as usbdrv:/
-                if(res == -1) LOG("Error mounting drive filesystem...")
-                else
-                {
-                    LOG("Drive filesystem mounted as usbdrv:/")
-
-                    LOG("Listing all files and directories on root...")
-
-                    DIR *dp = opendir("usbdrv:/");
-                    if(dp)
-                    {
-                        dirent *dt;
-                        while(true)
-                        {
-                            dt = readdir(dp);
-                            if(dt == NULL) break;
-                            LOG(" [" << ((dt->d_type & DT_DIR) ? "D" : "F") << "] usbdrv:/" << dt->d_name)
-                        }
-                        closedir(dp);
-
-                        LOG("Listed all files and dirs! :) ")
-                    }
-                    else
-                    {
-                        LOG("Bad opendir()...")
-                        consoleUpdate(NULL);  
-                    }
-                    LOG("Unmounting device...")
-                    fsdevUnmountDevice("usbdrv");
-                    LOG("Device unmounted.")
-                }
+                rc = fspusbSetDriveLabel(drive_iface_id, new_label);
+                if(R_SUCCEEDED(rc)) CONSOLE_PRINT("The drive's label was successfully changed.")
+                else CONSOLE_RESULT("changing the drive's label", rc)
             }
-            else LOG("Error getting drive's filesystem type: 0x" << std::hex << rc)
+            
+            break;
         }
     }
+
+    FspUsbFileSystemType fstype;
+    rc = fspusbGetDriveFileSystemType(drive_iface_id, &fstype);
+    if(R_SUCCEEDED(rc))
+    {
+        const char *fs = "<unknown type>";
+        switch(fstype)
+        {
+            case FspUsbFileSystemType_FAT12:
+                fs = "FAT12";
+                break;
+            case FspUsbFileSystemType_FAT16:
+                fs = "FAT16";
+                break;
+            case FspUsbFileSystemType_FAT32:
+                fs = "FAT32";
+                break;
+            case FspUsbFileSystemType_exFAT:
+                fs = "exFAT";
+                break;
+            default:
+                break;
+        }
+        CONSOLE_PRINT(" - Filesystem type: " << fs)
+    }
+    else CONSOLE_RESULT("getting the drive's filesystem type", rc)
+
+    FsFileSystem drvfs;
+    rc = fspusbOpenDriveFileSystem(drive_iface_id, &drvfs);
+    if(R_SUCCEEDED(rc))
+    {
+        s64 total = 0;
+        s64 free = 0;
+        fsFsGetTotalSpace(&drvfs, "/", &total);
+        fsFsGetFreeSpace(&drvfs, "/", &free);
+
+        CONSOLE_PRINT(" - Total space: " << FormatSize(total))
+        CONSOLE_PRINT(" - Free space: " << FormatSize(free))
+
+        int mountres = fsdevMountDevice("usbdrv", drvfs);
+        if(mountres != -1)
+        {
+            CONSOLE_PRINT("Listing root files and directories..." << std::endl)
+            auto dir = opendir("usbdrv:/");
+            if(dir)
+            {
+                dirent *dt;
+                while(true)
+                {
+                    dt = readdir(dir);
+                    if(dt == NULL) break;
+                    CONSOLE_PRINT(" - [" << ((dt->d_type & DT_DIR) ? "D" : "F") << "] usbdrv:/" << dt->d_name)
+                }
+                closedir(dir);
+            }
+            CONSOLE_PRINT(std::endl << "Done listing...")
+
+            fsdevUnmountDevice("usbdrv");
+            CONSOLE_PRINT("Unmounted and closed drive's filesystem.")
+        }
+        else CONSOLE_PRINT("Failed to mount the drive's filesystem...")
+        
+        fsFsClose(&drvfs);
+    }
+    else CONSOLE_RESULT("accessing the drive's filesystem", rc)
 }
 
 void WaitForInput()
@@ -184,18 +142,37 @@ int main()
     auto rc = fspusbInitialize();
     if(R_SUCCEEDED(rc))
     {
-        // Run all tests
-        TestFsType();
-        LOG(" --- ")
-        WaitForInput();
-        TestGetSetLabel();
-        LOG(" --- ")
-        WaitForInput();
-        TestFileSystem();
+        CONSOLE_PRINT("Searching for drives...")
 
-        fspusbExit();
+        s32 drive_ids[4] = {0};
+        s32 drive_count = 0;
+        fspusbListMountedDrives(drive_ids, 4, &drive_count);
+        CONSOLE_PRINT("Drive count: " << drive_count << " drives")
+        
+        if (drive_count > 0) 
+        {
+            CONSOLE_PRINT("Press any key to start testing...")
+            WaitForInput();
+        }
+        
+        for(s32 i = 0; i < drive_count; i++)
+        {
+            consoleClear();
+            PerformDriveTest(drive_ids[i]);
+            if ((i + 1) < drive_count)
+            {
+                CONSOLE_PRINT("Press any key to continue to the next drive...")
+                WaitForInput();
+            }
+        }
+
+        CONSOLE_PRINT("Press any key to exit...")
+        WaitForInput();
+        consoleExit(NULL);
+        socketExit();
+        return 0;
     }
-    else LOG("Error accessing fsp-usb: 0x" << std::hex << rc)
+    else CONSOLE_RESULT("accessing fsp-usb service", rc)
 
     consoleExit(NULL);
     socketExit();

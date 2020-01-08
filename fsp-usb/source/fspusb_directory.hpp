@@ -10,8 +10,8 @@ namespace fspusb {
             s32 usb_iface_id;
             DIR directory;
 
-            bool IsDriveOk() {
-                return impl::IsDriveOk(this->usb_iface_id);
+            bool IsDriveInterfaceIdValid() {
+                return impl::IsDriveInterfaceIdValid(this->usb_iface_id);
             }
 
         public:
@@ -22,7 +22,7 @@ namespace fspusb {
             }
 
             virtual ams::Result ReadImpl(s64 *out_count, ams::fs::DirectoryEntry *out_entries, s64 max_entries) override final {
-                R_UNLESS(this->IsDriveOk(), ResultDriveUnavailable());
+                R_UNLESS(this->IsDriveInterfaceIdValid(), ResultDriveUnavailable());
 
                 auto ffrc = FR_OK;
                 ams::fs::DirectoryEntry entry = {};
@@ -55,7 +55,7 @@ namespace fspusb {
             }
 
             virtual ams::Result GetEntryCountImpl(s64 *out) override final {
-                R_UNLESS(this->IsDriveOk(), ResultDriveUnavailable());
+                R_UNLESS(this->IsDriveInterfaceIdValid(), ResultDriveUnavailable());
 
                 s64 count = 0;
                 auto ffrc = FR_OK;

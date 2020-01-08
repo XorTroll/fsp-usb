@@ -9,7 +9,7 @@
 
 namespace fspusb::impl {
 
-    // Maximum amount of drives
+    /* Maximum amount of drives, basically FATFS's volume number */
     constexpr u32 DriveMax = FF_VOLUMES;
 
     class Drive {
@@ -22,15 +22,16 @@ namespace fspusb::impl {
             UsbHsClientEpSession usb_in_endpoint;
             UsbHsClientEpSession usb_out_endpoint;
             FATFS fat_fs;
+            u32 mounted_idx;
             char mount_name[0x10];
             SCSIDriveContext *scsi_context;
             bool mounted;
 
         public:
-            Drive(UsbHsClientIfSession interface, UsbHsClientEpSession in_ep, UsbHsClientEpSession out_ep);
-            Result Mount(u32 drive_idx);
+            Drive(UsbHsClientIfSession interface, UsbHsClientEpSession in_ep, UsbHsClientEpSession out_ep, u8 lun);
+            Result Mount();
             void Unmount();
-            void Dispose();
+            void Dispose(bool close_usbhs);
 
             s32 GetInterfaceId() {
                 return this->usb_interface.ID;
@@ -38,6 +39,10 @@ namespace fspusb::impl {
 
             SCSIDriveContext *GetSCSIContext() {
                 return this->scsi_context;
+            }
+
+            u32 GetMountedIndex() {
+                return this->mounted_idx;
             }
 
             u32 GetBlockSize()
@@ -55,7 +60,7 @@ namespace fspusb::impl {
                 return false;
             }
 
-            DRESULT DoReadSectors(u8 *buffer, u32 sector_offset, u32 num_sectors) {
+            DRESULT DoReadSectors(u8 *buffer, u64 sector_offset, u32 num_sectors) {
                 if(this->scsi_context != nullptr) {
                     int res = this->scsi_context->GetBlock()->ReadSectors(buffer, sector_offset, num_sectors);
                     if(res != 0) {
@@ -65,7 +70,7 @@ namespace fspusb::impl {
                 return RES_PARERR;
             }
 
-            DRESULT DoWriteSectors(const u8 *buffer, u32 sector_offset, u32 num_sectors) {
+            DRESULT DoWriteSectors(const u8 *buffer, u64 sector_offset, u32 num_sectors) {
                 if(this->scsi_context != nullptr) {
                     int res = this->scsi_context->GetBlock()->WriteSectors(buffer, sector_offset, num_sectors);
                     if(res != 0) {
