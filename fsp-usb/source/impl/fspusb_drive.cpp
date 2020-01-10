@@ -17,7 +17,11 @@ namespace fspusb::impl {
             /* Try to find a mountable index */
             if (FindAndMountAtIndex(&this->mounted_idx)) {
                 FormatDriveMountName(this->mount_name, this->mounted_idx);
+                FSP_USB_LOG("%s (interface ID %d): drive mount name -> \"%s\".", __func__, this->GetInterfaceId(), this->mount_name);
+                
                 auto ffrc = f_mount(&this->fat_fs, this->mount_name, 1);
+                FSP_USB_LOG("%s (interface ID %d): f_mount returned %u.", __func__, this->GetInterfaceId(), ffrc);
+                
                 rc = fspusb::result::CreateFromFRESULT(ffrc).GetValue();
                 if (R_SUCCEEDED(rc)) {
                     this->mounted = true;
@@ -44,7 +48,6 @@ namespace fspusb::impl {
         }
         
         if (close_usbhs) {
-            usbHsIfResetDevice(&this->usb_interface);
             usbHsEpClose(&this->usb_in_endpoint);
             usbHsEpClose(&this->usb_out_endpoint);
             usbHsIfClose(&this->usb_interface);

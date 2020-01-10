@@ -25,28 +25,38 @@ namespace fspusb::impl {
         
         Result rc;
         
+        FSP_USB_LOG("%s: acquired drive count -> %lu.", __func__, g_usb_manager_drives.size());
+        
         if(!g_usb_manager_drives.empty()) {
-            rc = usbHsQueryAcquiredInterfaces(iface_block, iface_block_size, &iface_count);
+            FSP_USB_LOG("%s: checking interfaces from previously acquired drives.", __func__);
+            
             std::vector<DrivePointer> valid_drives;
-            if(R_SUCCEEDED(rc)) {
+            rc = usbHsQueryAcquiredInterfaces(iface_block, iface_block_size, &iface_count);
+            if (R_SUCCEEDED(rc)) {
                 for(auto &drive: g_usb_manager_drives) {
                     /* For each drive in our list, check whether it is still available (by looping through actual acquired interfaces) */
                     bool ok = false;
+                    
                     for(s32 i = 0; i < iface_count; i++) {
-                        if(iface_block[i].inf.ID == drive->GetInterfaceId()) {
+                        if (iface_block[i].inf.ID == drive->GetInterfaceId()) {
                             ok = true;
                             break;
                         }
                     }
-                    if(ok) {
+                    
+                    if (ok) {
+                        FSP_USB_LOG("%s: drive with interface ID %d still available.", __func__, drive->GetInterfaceId());
                         valid_drives.push_back(std::move(drive));
-                    }
-                    else {
+                    } else {
+                        FSP_USB_LOG("%s: drive with interface ID %d not available anymore.", __func__, drive->GetInterfaceId());
                         drive->Unmount();
                         drive->Dispose(true);
                     }
                 }
+            } else {
+                FSP_USB_LOG("%s: usbHsQueryAcquiredInterfaces returned 0x%08X.", __func__, rc);
             }
+            
             g_usb_manager_drives.clear();
             for(auto &drive: valid_drives) {
                 g_usb_manager_drives.push_back(std::move(drive));
@@ -58,7 +68,10 @@ namespace fspusb::impl {
         
         /* Check new ones and (try to) acquire them */
         rc = usbHsQueryAvailableInterfaces(&g_usb_manager_device_filter, iface_block, iface_block_size, &iface_count);
-        if (R_FAILED(rc)) return;
+        if (R_FAILED(rc)) {
+            FSP_USB_LOG("%s: usbHsQueryAvailableInterfaces returned 0x%08X.", __func__, rc);
+            return;
+        }
         
         for(s32 i = 0; i < iface_count; i++) {
             UsbHsClientIfSession iface;
@@ -192,6 +205,8 @@ namespace fspusb::impl {
             idx = 0;
             rc = waitMulti(&idx, -1, waiterForEvent(usbHsGetInterfaceStateChangeEvent()), waiterForEvent(&g_usb_manager_interface_available_event), waiterForEvent(&g_usb_manager_thread_exit_event));
             if (R_SUCCEEDED(rc)) {
+                FSP_USB_LOG("%s: triggered event index -> %d (%s).", __func__, idx, (idx == 0 ? "interface state change" : (idx == 1 ? "filtered interface available" : "exit")));
+                
                 /* Clear InterfaceStateChangeEvent if it was triggered (not an autoclear event) */
                 if (idx == 0) {
                     eventClear(usbHsGetInterfaceStateChangeEvent());
@@ -204,6 +219,8 @@ namespace fspusb::impl {
                 
                 // Update drives
                 UpdateDrives();
+            } else {
+                FSP_USB_LOG("%s: waitMulti returned 0x%08X.", __func__, rc);
             }
         }
     }
@@ -335,9 +352,8 @@ namespace fspusb::impl {
 
     u32 GetDriveMountedIndex(s32 drive_interface_id) {
         std::scoped_lock lk(g_usb_manager_lock);
-        for(u32 i = 0; i < g_usb_manager_drives.size(); i++) {
-            auto &drive = g_usb_manager_drives.at(i);
-            if(drive_interface_id == drive->GetInterfaceId()) {
+        for(auto &drive: g_usb_manager_drives) {
+            if (drive_interface_id == drive->GetInterfaceId()) {
                 return drive->GetMountedIndex();
             }
         }
@@ -346,7 +362,7 @@ namespace fspusb::impl {
 
     s32 GetDriveInterfaceId(u32 drive_idx) {
         std::scoped_lock lk(g_usb_manager_lock);
-        if(drive_idx < g_usb_manager_drives.size()) {
+        if (drive_idx < g_usb_manager_drives.size()) {
             auto &drive = g_usb_manager_drives.at(drive_idx);
             return drive->GetInterfaceId();
         }
@@ -358,6 +374,7 @@ namespace fspusb::impl {
         for(auto &drive: g_usb_manager_drives) {
             if(drive_interface_id == drive->GetInterfaceId()) {
                 fn(drive);
+                break;
             }
         }
     }
@@ -367,6 +384,7 @@ namespace fspusb::impl {
         for(auto &drive: g_usb_manager_drives) {
             if(drive_mounted_idx == drive->GetMountedIndex()) {
                 fn(drive);
+                break;
             }
         }
     }

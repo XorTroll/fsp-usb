@@ -348,20 +348,19 @@ namespace fspusb::impl {
         if (this->ok) {
             FSP_USB_LOG("%s (interface ID %d): OK to proceed.", __func__, this->client->ID);
             
-            u32 retries = SCSI_TRANSFER_RETRIES;
             u32 total_transferred = 0;
             u32 transferred = 0;
             u32 block_size = (u32)(BufferSize * USB_TRANSFER_MEMORY_MAX_MULTIPLIER);
             u32 transfer_length = c.GetDataTransferLength();
             u32 cur_transfer_size = 0;
+            bool received_status = false;
             
             FSP_USB_LOG("%s (interface ID %d): block size -> %u | data transfer length -> %u | %s buffer | direction -> %s.", __func__, this->client->ID, block_size, transfer_length, (buffer == nullptr ? "invalid" : "valid"), (c.GetDirection() == SCSIDirection::In ? "in" : "out"));
             
-            do {
-                retries--;
+            for(u32 i = 0; i < SCSI_TRANSFER_RETRIES; i++) {
                 this->ok = true;
                 
-                FSP_USB_LOG("%s (interface ID %d): attempt #%u.", __func__, this->client->ID, SCSI_TRANSFER_RETRIES - retries);
+                FSP_USB_LOG("%s (interface ID %d): attempt #%u.", __func__, this->client->ID, i + 1);
                 
                 this->PushCommand(c, total_transferred);
                 if (!this->ok) {
@@ -420,8 +419,14 @@ namespace fspusb::impl {
                     continue;
                 }
                 
+                received_status = true;
+                
                 break;
-            } while(retries > 0);
+            }
+            
+            if (!received_status) {
+                status.status = SCSI_CMD_STATUS_FAILED;
+            }
         } else {
             status.status = SCSI_CMD_STATUS_FAILED;
             FSP_USB_LOG("%s (interface ID %d): not OK to proceed.", __func__, this->client->ID);
@@ -501,13 +506,15 @@ namespace fspusb::impl {
                         break;
                 }
                 
-                // We may need to further analyze these responses...
-                /*FILE *rsresp = fopen("sdmc:/rsresp.bin", "wb");
+#ifdef FSP_USB_DEBUG
+                /* We may need to further analyze these responses... */
+                FILE *rsresp = fopen("sdmc:/rsresp.bin", "wb");
                 if (rsresp)
                 {
-                    fwrite(request_sense_response, 1, 0x14, rsresp);
+                    fwrite(request_sense_response, 1, SCSI_REQUEST_SENSE_REPLY_LEN, rsresp);
                     fclose(rsresp);
-                }*/
+                }
+#endif
             } else {
                 this->ok = false;
                 FSP_USB_LOG("%s: RequestSense command failed (0x%02X).", __func__, rs_status.status);
