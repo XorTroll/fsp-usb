@@ -1,5 +1,7 @@
 # fsp-usb
 
+## The development of this project is currently active on this [Atmosphere fork](https://github.com/XorTroll/Atmosphere/tree/fspusb). 
+
 > Custom Nintendo Switch service to mount and access USB drives
 
 ## Information
