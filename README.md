@@ -1,6 +1,6 @@
 # fsp-usb
 
-## The development of this project is currently active on this [Atmosphere fork](https://github.com/XorTroll/Atmosphere/tree/fspusb). 
+## **IMPORTANT!** this project is no longer continued. If you want to mount/use USB drives in your Switch homebrew, check [here](https://github.com/DarkMatterCore/libusbhsfs).
 
 > Custom Nintendo Switch service to mount and access USB drives
 
